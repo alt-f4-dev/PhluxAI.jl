@@ -1,5 +1,7 @@
 # PhluxAI.jl
 
+[![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://alt-f4-dev.github.io/PhluxAI.jl/dev/)
+
 PhluxAI.jl is a local multimodal agent framework for Julia. It combines:
 
 - Ollama for text and vision models;
