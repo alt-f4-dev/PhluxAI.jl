@@ -22,6 +22,7 @@ jobs:
       PHLUXAI_SKIP_OLLAMA_INSTALL: '1'
       PHLUXAI_SKIP_COMFY_INSTALL: '1'
       PHLUXAI_BANNER: '0'
+      RESEAU_PRECOMPILE_ONLY: 'eventloops,internal_poll,socket_ops,tcp,host_resolvers'
 
     steps:
       - uses: actions/checkout@v4

@@ -4,6 +4,10 @@ ENV["PHLUXAI_SKIP_OLLAMA_INSTALL"] = "1"
 ENV["PHLUXAI_SKIP_COMFY_INSTALL"] = "1"
 ENV["PHLUXAI_BANNER"] = "0"
 
+if !haskey(ENV, "RESEAU_PRECOMPILE_ONLY")
+    ENV["RESEAU_PRECOMPILE_ONLY"] = "eventloops,internal_poll,socket_ops,tcp,host_resolvers"
+end
+
 Pkg.activate(@__DIR__)
 Pkg.instantiate()
 
