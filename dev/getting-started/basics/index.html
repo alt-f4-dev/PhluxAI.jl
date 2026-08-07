@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Getting started · PhluxAI.jl</title><meta name="title" content="Getting started · PhluxAI.jl"/><meta property="og:title" content="Getting started · PhluxAI.jl"/><meta property="twitter:title" content="Getting started · PhluxAI.jl"/><meta name="description" content="Documentation for PhluxAI.jl."/><meta property="og:description" content="Documentation for PhluxAI.jl."/><meta property="twitter:description" content="Documentation for PhluxAI.jl."/><meta property="og:url" content="https://alt-f4-dev.github.io/PhluxAI.jl/getting-started/basics/"/><meta property="twitter:url" content="https://alt-f4-dev.github.io/PhluxAI.jl/getting-started/basics/"/><link rel="canonical" href="https://alt-f4-dev.github.io/PhluxAI.jl/getting-started/basics/"/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../../">PhluxAI.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li class="is-active"><a class="tocitem" href>Getting started</a><ul class="internal"><li><a class="tocitem" href="#1.-Install-and-verify-models"><span>1. Install and verify models</span></a></li><li><a class="tocitem" href="#2.-Start-PhluxAI-and-the-local-runtimes"><span>2. Start PhluxAI and the local runtimes</span></a></li><li><a class="tocitem" href="#3.-Configure-ComfyUI-image-generation"><span>3. Configure ComfyUI image generation</span></a></li><li class="toplevel"><a class="tocitem" href="#Interactive-usage"><span>Interactive usage</span></a></li><li><a class="tocitem" href="#4.-Generic-interactive-model-session"><span>4. Generic interactive model session</span></a></li><li><a class="tocitem" href="#5.-Physics-assistant-session"><span>5. Physics-assistant session</span></a></li><li><a class="tocitem" href="#6.-Interactive-command-reference"><span>6. Interactive command reference</span></a></li><li><a class="tocitem" href="#7.-Configure-the-next-interactive-session-with-@budget"><span>7. Configure the next interactive session with <code>@budget</code></span></a></li><li class="toplevel"><a class="tocitem" href="#Programmatic-usage"><span>Programmatic usage</span></a></li><li><a class="tocitem" href="#8.-Create-a-generic-ModelSession"><span>8. Create a generic <code>ModelSession</code></span></a></li><li><a class="tocitem" href="#9.-respond!-versus-ask!"><span>9. <code>respond!</code> versus <code>ask!</code></span></a></li><li><a class="tocitem" href="#10.-Change-session-defaults"><span>10. Change session defaults</span></a></li><li><a class="tocitem" href="#11.-Create-a-programmatic-PhysicsAssistant"><span>11. Create a programmatic <code>PhysicsAssistant</code></span></a></li><li><a class="tocitem" href="#12.-Multimodal-input"><span>12. Multimodal input</span></a></li><li><a class="tocitem" href="#13.-Generate-images"><span>13. Generate images</span></a></li><li><a class="tocitem" href="#14.-Tool-execution-with-jupy-and-jupip"><span>14. Tool execution with <code>jupy</code> and <code>jupip</code></span></a></li><li><a class="tocitem" href="#15.-Sandbox-configuration"><span>15. Sandbox configuration</span></a></li><li><a class="tocitem" href="#16.-Diagnostics"><span>16. Diagnostics</span></a></li><li><a class="tocitem" href="#17.-Model-capability-inspection"><span>17. Model capability inspection</span></a></li><li><a class="tocitem" href="#18.-Persistence-and-resume"><span>18. Persistence and resume</span></a></li><li><a class="tocitem" href="#19.-Enter-a-terminal-loop-from-a-retained-object"><span>19. Enter a terminal loop from a retained object</span></a></li><li><a class="tocitem" href="#20.-Low-level-model-lifecycle"><span>20. Low-level model lifecycle</span></a></li><li><a class="tocitem" href="#21.-Complete-generic-example"><span>21. Complete generic example</span></a></li><li><a class="tocitem" href="#22.-Complete-multimodal-physics-example"><span>22. Complete multimodal physics example</span></a></li><li><a class="tocitem" href="#23.-Operational-notes"><span>23. Operational notes</span></a></li></ul></li><li><span class="tocitem">Installation</span><ul><li><a class="tocitem" href="../../installation/build/">Build and external runtimes</a></li><li><a class="tocitem" href="../../installation/ollama/">Ollama models</a></li><li><a class="tocitem" href="../../installation/comfy/">ComfyUI models and workflows</a></li></ul></li><li><a class="tocitem" href="../../reference/api/">Reference</a></li><li><span class="tocitem">Development</span><ul><li><a class="tocitem" href="../../development/documentation/">Documentation</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>Getting started</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Getting started</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/alt-f4-dev/PhluxAI.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/alt-f4-dev/PhluxAI.jl/blob/main/docs/src/getting-started/basics.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="PhluxAI-Basics"><a class="docs-heading-anchor" href="#PhluxAI-Basics">PhluxAI Basics</a><a id="PhluxAI-Basics-1"></a><a class="docs-heading-anchor-permalink" href="#PhluxAI-Basics" title="Permalink"></a></h1><p>PhluxAI is a local multimodal framework for stateful Ollama text and vision sessions, ComfyUI image generation, exposed reasoning fields, multimodal artifacts, and model-requested tool execution through <code>jupy</code> and <code>jupip</code>.</p><p>The text/vision model and image-generation model are independent:</p><ul><li><code>@model</code> and <code>@agent</code> select the Ollama conversational model;</li><li><code>@imagemodel</code> or <code>image=...</code> selects a ComfyUI image model when a default ComfyUI workflow has been configured;</li><li><code>\image PROMPT</code> generates through the image backend attached to the active session.</li></ul><p>This guide covers two styles of use:</p><ol><li><strong>Interactive use</strong> through <code>@model</code>, <code>@agent</code>, <code>@imagemodel</code>, <code>@resume</code>, and the terminal REPL.</li><li><strong>Programmatic use</strong> through <code>ModelSession</code>, <code>PhysicsAssistant</code>, <code>respond!</code>, <code>ask!</code>, <code>generate_images!</code>, and <code>ComfyBackend</code>.</li></ol><p>The examples assume PhluxAI has been built successfully. See <code>BUILD.md</code> for the external runtime installation and build flags.</p><hr/><h2 id="1.-Install-and-verify-models"><a class="docs-heading-anchor" href="#1.-Install-and-verify-models">1. Install and verify models</a><a id="1.-Install-and-verify-models-1"></a><a class="docs-heading-anchor-permalink" href="#1.-Install-and-verify-models" title="Permalink"></a></h2><h3 id="Ollama-text-or-vision-model"><a class="docs-heading-anchor" href="#Ollama-text-or-vision-model">Ollama text or vision model</a><a id="Ollama-text-or-vision-model-1"></a><a class="docs-heading-anchor-permalink" href="#Ollama-text-or-vision-model" title="Permalink"></a></h3><p>Install a conversational model through the Ollama CLI:</p><pre><code class="language-bash hljs">ollama pull gpt-oss:20b</code></pre><p>For a vision-capable model:</p><pre><code class="language-bash hljs">ollama pull qwen3-vl:4b</code></pre><p>List locally installed Ollama models:</p><pre><code class="language-bash hljs">ollama list</code></pre><p>Run a direct smoke test:</p><pre><code class="language-bash hljs">ollama run gpt-oss:20b</code></pre><p>Press <code>Ctrl+D</code> or enter <code>/bye</code> to leave the Ollama CLI.</p><p>PhluxAI can preload an Ollama model automatically when a session is constructed with <code>start_model=true</code>, but pulling it explicitly first gives clearer installation and storage errors.</p><h3 id="ComfyUI-image-model"><a class="docs-heading-anchor" href="#ComfyUI-image-model">ComfyUI image model</a><a id="ComfyUI-image-model-1"></a><a class="docs-heading-anchor-permalink" href="#ComfyUI-image-model" title="Permalink"></a></h3><p>The PhluxAI build installs and configures <code>comfy-cli</code> and ComfyUI, but it does not download image-model weights. Select and install those separately.</p><p>A checkpoint download typically uses:</p><pre><code class="language-bash hljs">comfy model download \
+  --url &lt;MODEL_URL&gt; \
+  --relative-path models/checkpoints</code></pre><p>With the default Linux workspace, checkpoints normally live under:</p><pre><code class="language-text hljs">~/.local/share/PhluxAI/comfy/ComfyUI/models/checkpoints/</code></pre><p>Other model classes can require different ComfyUI model directories. Follow the model and workflow documentation rather than assuming every file is a checkpoint.</p><p>Image-model files are runtime/user data and do not belong in the PhluxAI repository.</p><hr/><h2 id="2.-Start-PhluxAI-and-the-local-runtimes"><a class="docs-heading-anchor" href="#2.-Start-PhluxAI-and-the-local-runtimes">2. Start PhluxAI and the local runtimes</a><a id="2.-Start-PhluxAI-and-the-local-runtimes-1"></a><a class="docs-heading-anchor-permalink" href="#2.-Start-PhluxAI-and-the-local-runtimes" title="Permalink"></a></h2><p>From the package repository during development, launch Julia through Jupy:</p><pre><code class="language-bash hljs">jupy</code></pre><p><code>jupy</code> resolves the nearest Julia project, activates it, and binds PythonCall to that project&#39;s <code>.venv</code>. Run it from the intended project directory or one of its descendants.</p><p>Then import the package:</p><pre><code class="language-julia hljs">using PhluxAI</code></pre><p>Print the splash manually:</p><pre><code class="language-julia hljs">welcome()</code></pre><p>Suppress the automatic interactive splash:</p><pre><code class="language-bash hljs">PHLUXAI_BANNER=0 jupy</code></pre><p>Ollama must be running for text/vision sessions. When installed as a local service this is normally automatic; otherwise start it separately:</p><pre><code class="language-bash hljs">ollama serve</code></pre><p>ComfyUI is required only when using a <code>ComfyBackend</code>. Start it with:</p><pre><code class="language-bash hljs">comfy launch --background</code></pre><p>Verify the default local endpoint:</p><pre><code class="language-bash hljs">curl -fsS http://127.0.0.1:8188/system_stats</code></pre><p>Stop it with:</p><pre><code class="language-bash hljs">comfy stop</code></pre><hr/><h2 id="3.-Configure-ComfyUI-image-generation"><a class="docs-heading-anchor" href="#3.-Configure-ComfyUI-image-generation">3. Configure ComfyUI image generation</a><a id="3.-Configure-ComfyUI-image-generation-1"></a><a class="docs-heading-anchor-permalink" href="#3.-Configure-ComfyUI-image-generation" title="Permalink"></a></h2><p>ComfyUI model selection and workflow selection are separate concerns. A model filename identifies the model loaded by a workflow; the API-format workflow defines the graph that loads, conditions, samples, decodes, and saves the image.</p><p>PhluxAI therefore requires explicit workflow bindings. <code>positive_prompt</code> is required for prompt injection. <code>model</code> is also required when selecting a model by filename through <code>@imagemodel</code> or <code>image=&quot;...&quot;</code>.</p><p>For example:</p><pre><code class="language-julia hljs">bindings = ComfyBindings(
+    positive_prompt = WorkflowBinding(&quot;6&quot;, &quot;text&quot;),
+    model = WorkflowBinding(&quot;4&quot;, &quot;ckpt_name&quot;),
+    negative_prompt = WorkflowBinding(&quot;7&quot;, &quot;text&quot;),
+    seed = WorkflowBinding(&quot;3&quot;, &quot;seed&quot;),
+    width = WorkflowBinding(&quot;5&quot;, &quot;width&quot;),
+    height = WorkflowBinding(&quot;5&quot;, &quot;height&quot;),
+    batch_size = WorkflowBinding(&quot;5&quot;, &quot;batch_size&quot;),
+    steps = WorkflowBinding(&quot;3&quot;, &quot;steps&quot;),
+    cfg_scale = WorkflowBinding(&quot;3&quot;, &quot;cfg&quot;),
+    sampler_name = WorkflowBinding(&quot;3&quot;, &quot;sampler_name&quot;),
+    scheduler = WorkflowBinding(&quot;3&quot;, &quot;scheduler&quot;),
+    filename_prefix = WorkflowBinding(&quot;9&quot;, &quot;filename_prefix&quot;),
+)</code></pre><p>The node IDs above are examples only. They must match the actual API-format workflow being used.</p><p>Configure a model-neutral default workflow:</p><pre><code class="language-julia hljs">set_default_image_workflow!(
+    &quot;/path/to/sdxl_api.json&quot;,
+    bindings,
+)</code></pre><p>The workflow can live anywhere on the filesystem. It does not have to exist in the PhluxAI repository. Small maintained reference workflows may be committed under a directory such as <code>examples/workflows/</code>, while personal workflows are better kept in user data.</p><p>Inspect or clear the process-local default:</p><pre><code class="language-julia hljs">default_image_workflow()
+clear_default_image_workflow!()</code></pre><h3 id="Select-an-image-model-for-the-next-session"><a class="docs-heading-anchor" href="#Select-an-image-model-for-the-next-session">Select an image model for the next session</a><a id="Select-an-image-model-for-the-next-session-1"></a><a class="docs-heading-anchor-permalink" href="#Select-an-image-model-for-the-next-session" title="Permalink"></a></h3><p><code>@imagemodel</code> stores a one-shot image backend consumed by the next <code>@model</code> or <code>@agent</code> call:</p><pre><code class="language-julia hljs">@imagemodel &quot;sd_xl_base_1.0.safetensors&quot;
+@model &quot;qwen3-vl:4b&quot;</code></pre><p>The same selection can be written inline:</p><pre><code class="language-julia hljs">@model &quot;qwen3-vl:4b&quot; image=&quot;sd_xl_base_1.0.safetensors&quot;</code></pre><p>or for an agent:</p><pre><code class="language-julia hljs">@agent :physics &quot;qwen3-vl:4b&quot; \
+    image=&quot;sd_xl_base_1.0.safetensors&quot;</code></pre><p>An explicit backend is also accepted:</p><pre><code class="language-julia hljs">backend = ComfyBackend(
+    &quot;/path/to/sdxl_api.json&quot;,
+    bindings;
+    model = &quot;sd_xl_base_1.0.safetensors&quot;,
+)
+
+@model &quot;qwen3-vl:4b&quot; image=backend</code></pre><p>An explicit <code>image=...</code> argument overrides and consumes a pending <code>@imagemodel</code> selection. <code>@imagemodel</code> does not apply to <code>@resume</code> in the current API. To attach a Comfy backend to a resumed session, load it programmatically, call <code>set_image_backend!</code>, and then enter <code>repl</code>.</p><p>The default workflow is process-local and is not persisted with chat-session state. The selected image model is likewise not persisted as part of the chat session.</p><hr/><h1 id="Interactive-usage"><a class="docs-heading-anchor" href="#Interactive-usage">Interactive usage</a><a id="Interactive-usage-1"></a><a class="docs-heading-anchor-permalink" href="#Interactive-usage" title="Permalink"></a></h1><p>The macros launch blocking PhluxAI terminal loops. They are intended for direct conversation. The session object is internal to the macro and the macro returns after its REPL exits.</p><p>Use the programmatic constructors later in this guide when the session object must remain available for inspection or further configuration.</p><h2 id="4.-Generic-interactive-model-session"><a class="docs-heading-anchor" href="#4.-Generic-interactive-model-session">4. Generic interactive model session</a><a id="4.-Generic-interactive-model-session-1"></a><a class="docs-heading-anchor-permalink" href="#4.-Generic-interactive-model-session" title="Permalink"></a></h2><p>Start an in-memory agentless session:</p><pre><code class="language-julia hljs">@model &quot;gpt-oss:20b&quot;</code></pre><p>Example interaction:</p><pre><code class="language-text hljs">Model ready. Type &#39;\help&#39; for commands.
+────────────────────────────────────────────────────────────
+
+you&gt; Explain the physical meaning of a branch cut.
+
+assistant&gt; ...
+
+you&gt; Give a more formal statement.
+
+assistant&gt; ...
+
+you&gt; \exit</code></pre><p>The model response streams to the terminal.</p><h3 id="Persistent-generic-session"><a class="docs-heading-anchor" href="#Persistent-generic-session">Persistent generic session</a><a id="Persistent-generic-session-1"></a><a class="docs-heading-anchor-permalink" href="#Persistent-generic-session" title="Permalink"></a></h3><p>Supply a session directory:</p><pre><code class="language-julia hljs">@model &quot;gpt-oss:20b&quot; &quot;sessions/general&quot;</code></pre><p>PhluxAI stores resumable state under that directory. The default artifact and sandbox locations are:</p><pre><code class="language-text hljs">sessions/general/artifacts/
+sessions/general/sandbox/</code></pre><p>Resume the session later:</p><pre><code class="language-julia hljs">@resume &quot;gpt-oss:20b&quot; &quot;sessions/general&quot;</code></pre><p><code>@resume</code> reads the saved session type and selects the generic or physics wrapper automatically.</p><hr/><h2 id="5.-Physics-assistant-session"><a class="docs-heading-anchor" href="#5.-Physics-assistant-session">5. Physics-assistant session</a><a id="5.-Physics-assistant-session-1"></a><a class="docs-heading-anchor-permalink" href="#5.-Physics-assistant-session" title="Permalink"></a></h2><p>Start the condensed-matter physics profile:</p><pre><code class="language-julia hljs">@agent :physics &quot;gpt-oss:20b&quot;</code></pre><p>Start a persistent physics session:</p><pre><code class="language-julia hljs">@agent :physics &quot;gpt-oss:20b&quot; &quot;sessions/scco&quot;</code></pre><p>Resume it later:</p><pre><code class="language-julia hljs">@resume &quot;gpt-oss:20b&quot; &quot;sessions/scco&quot;</code></pre><p>The physics REPL supports turn-specific mode sigils:</p><pre><code class="language-text hljs">you&gt; \general Summarize the current argument.
+
+you&gt; \derive Derive the response-function pole condition.
+
+you&gt; \code Implement the susceptibility in Julia and plot it.
+
+you&gt; \draft Write the corresponding manuscript paragraph.</code></pre><p>The mode temperatures are:</p><table><tr><th style="text-align: right">Mode</th><th style="text-align: right">Default temperature</th><th style="text-align: right">Intended use</th></tr><tr><td style="text-align: right"><code>GENERAL</code></td><td style="text-align: right"><code>0.70</code></td><td style="text-align: right">General technical discussion</td></tr><tr><td style="text-align: right"><code>DERIVE</code></td><td style="text-align: right"><code>0.15</code></td><td style="text-align: right">Formal derivations</td></tr><tr><td style="text-align: right"><code>CODE</code></td><td style="text-align: right"><code>0.10</code></td><td style="text-align: right">Complete Julia implementations</td></tr><tr><td style="text-align: right"><code>DRAFT</code></td><td style="text-align: right"><code>0.50</code></td><td style="text-align: right">Manuscript or proposal drafting</td></tr></table><p>A mode sigil applies to that turn. The configured default mode remains unchanged.</p><hr/><h2 id="6.-Interactive-command-reference"><a class="docs-heading-anchor" href="#6.-Interactive-command-reference">6. Interactive command reference</a><a id="6.-Interactive-command-reference-1"></a><a class="docs-heading-anchor-permalink" href="#6.-Interactive-command-reference" title="Permalink"></a></h2><p>Enter <code>\help</code> inside either REPL to print the command list.</p><table><tr><th style="text-align: right">Command</th><th style="text-align: right">Effect</th></tr><tr><td style="text-align: right"><code>\temp</code></td><td style="text-align: right">Show the current temperature</td></tr><tr><td style="text-align: right"><code>\temp VALUE</code></td><td style="text-align: right">Set the session temperature</td></tr><tr><td style="text-align: right"><code>\temp default</code></td><td style="text-align: right">Reset a generic session to <code>0.7</code></td></tr><tr><td style="text-align: right"><code>\temp auto</code></td><td style="text-align: right">Physics REPL only: return to the active mode temperature</td></tr><tr><td style="text-align: right"><code>\think</code></td><td style="text-align: right">Show the current thinking setting</td></tr><tr><td style="text-align: right"><code>\think off</code></td><td style="text-align: right">Disable requested thinking</td></tr><tr><td style="text-align: right"><code>\think on</code></td><td style="text-align: right">Request thinking without a named level</td></tr><tr><td style="text-align: right"><code>\think low</code></td><td style="text-align: right">Request low thinking</td></tr><tr><td style="text-align: right"><code>\think medium</code></td><td style="text-align: right">Request medium thinking</td></tr><tr><td style="text-align: right"><code>\think high</code></td><td style="text-align: right">Request high thinking</td></tr><tr><td style="text-align: right"><code>\think max</code></td><td style="text-align: right">Request the maximum named level</td></tr><tr><td style="text-align: right"><code>\think default</code></td><td style="text-align: right">Return to the model default</td></tr><tr><td style="text-align: right"><code>\reasoning show</code></td><td style="text-align: right">Display reasoning chunks during streaming</td></tr><tr><td style="text-align: right"><code>\reasoning hide</code></td><td style="text-align: right">Hide reasoning chunks</td></tr><tr><td style="text-align: right"><code>\tools</code></td><td style="text-align: right">Show the current tool mode</td></tr><tr><td style="text-align: right"><code>\tools off</code></td><td style="text-align: right">Do not expose or execute tools</td></tr><tr><td style="text-align: right"><code>\tools ask</code></td><td style="text-align: right">Ask before executing every tool request</td></tr><tr><td style="text-align: right"><code>\tools auto</code></td><td style="text-align: right">Auto-approve non-network tools</td></tr><tr><td style="text-align: right"><code>\attach PATH</code></td><td style="text-align: right">Import a file as a pending attachment</td></tr><tr><td style="text-align: right"><code>\attachments</code></td><td style="text-align: right">List pending attachments</td></tr><tr><td style="text-align: right"><code>\clearattachments</code></td><td style="text-align: right">Clear pending attachments</td></tr><tr><td style="text-align: right"><code>\image PROMPT</code></td><td style="text-align: right">Generate through the image backend attached to the active session</td></tr><tr><td style="text-align: right"><code>\artifacts</code></td><td style="text-align: right">List files in the session artifact store</td></tr><tr><td style="text-align: right"><code>\sandbox</code></td><td style="text-align: right">Show sandbox workspace, backend, and network state</td></tr><tr><td style="text-align: right"><code>\save</code></td><td style="text-align: right">Save the current session</td></tr><tr><td style="text-align: right"><code>\exit</code></td><td style="text-align: right">Save, close, and leave</td></tr><tr><td style="text-align: right"><code>\quit</code></td><td style="text-align: right">Save, close, and leave</td></tr><tr><td style="text-align: right"><code>\bye</code></td><td style="text-align: right">Generic REPL only: save, close, and leave</td></tr></table><h3 id="Change-temperature-interactively"><a class="docs-heading-anchor" href="#Change-temperature-interactively">Change temperature interactively</a><a id="Change-temperature-interactively-1"></a><a class="docs-heading-anchor-permalink" href="#Change-temperature-interactively" title="Permalink"></a></h3><pre><code class="language-text hljs">you&gt; \temp
+Temperature: 0.7
+
+you&gt; \temp 0.2
+Temperature set to 0.2</code></pre><p>In the physics REPL:</p><pre><code class="language-text hljs">you&gt; \temp 0.05
+Temperature override set to 0.05
+
+you&gt; \temp auto
+Temperature reset to mode default: 0.7</code></pre><h3 id="Request-and-display-reasoning"><a class="docs-heading-anchor" href="#Request-and-display-reasoning">Request and display reasoning</a><a id="Request-and-display-reasoning-1"></a><a class="docs-heading-anchor-permalink" href="#Request-and-display-reasoning" title="Permalink"></a></h3><pre><code class="language-text hljs">you&gt; \think high
+Thinking set to high
+
+you&gt; \reasoning show
+Reasoning display: show
+
+you&gt; Derive the result and then state the final conclusion.</code></pre><p>Thinking support depends on the selected model. PhluxAI keeps reasoning separate from final response text.</p><h3 id="Attach-an-image-or-other-file"><a class="docs-heading-anchor" href="#Attach-an-image-or-other-file">Attach an image or other file</a><a id="Attach-an-image-or-other-file-1"></a><a class="docs-heading-anchor-permalink" href="#Attach-an-image-or-other-file" title="Permalink"></a></h3><pre><code class="language-text hljs">you&gt; \attach data/detector_scan.png
+Attached: detector_scan.png
+
+you&gt; Identify the dominant features in this scan.</code></pre><p>The interactive loop automatically includes pending attachments in the next turn and clears the pending list after a successful response.</p><h3 id="Generate-an-image"><a class="docs-heading-anchor" href="#Generate-an-image">Generate an image</a><a id="Generate-an-image-1"></a><a class="docs-heading-anchor-permalink" href="#Generate-an-image" title="Permalink"></a></h3><p>A ComfyUI-enabled session can generate through the backend selected when the session was created:</p><pre><code class="language-text hljs">you&gt; \image Publication-style schematic of a two-leg spin ladder</code></pre><p><code>\image</code> does not choose a checkpoint. It sends the prompt to the image backend already attached to the session. For a named ComfyUI model, configure a default workflow and use <code>@imagemodel</code> or <code>image=...</code> before entering the REPL.</p><p>Generated files are imported into the session artifact store and listed after the request completes.</p><h3 id="Enable-code-execution-tools"><a class="docs-heading-anchor" href="#Enable-code-execution-tools">Enable code-execution tools</a><a id="Enable-code-execution-tools-1"></a><a class="docs-heading-anchor-permalink" href="#Enable-code-execution-tools" title="Permalink"></a></h3><pre><code class="language-text hljs">you&gt; \tools ask
+Tool mode set to TOOLS_ASK
+
+you&gt; Write a Julia script that plots sin(x), run it, and save the PNG.</code></pre><p>In <code>TOOLS_ASK</code> mode, PhluxAI prints the requested tool, its risk class, and its JSON arguments before asking for approval.</p><hr/><h2 id="7.-Configure-the-next-interactive-session-with-@budget"><a class="docs-heading-anchor" href="#7.-Configure-the-next-interactive-session-with-@budget">7. Configure the next interactive session with <code>@budget</code></a><a id="7.-Configure-the-next-interactive-session-with-@budget-1"></a><a class="docs-heading-anchor-permalink" href="#7.-Configure-the-next-interactive-session-with-@budget" title="Permalink"></a></h2><p><code>@budget</code> changes the <code>BudgetConfig</code> consumed by the next <code>@model</code>, <code>@agent</code>, or <code>@resume</code> invocation. The setting is one-shot and resets after use.</p><pre><code class="language-julia hljs">@budget num_ctx=32768 max_tokens=1024 num_thread=8
+@model &quot;gpt-oss:20b&quot;</code></pre><p>A larger persistent physics session:</p><pre><code class="language-julia hljs">@budget num_ctx=32768 \
+        summary_budget=1200 \
+        response_budget=1024 \
+        safety_margin=512 \
+        compression_frac=0.7 \
+        m_verbatim=8 \
+        num_thread=8 \
+        max_tokens=1024
+
+@agent :physics &quot;gpt-oss:20b&quot; &quot;sessions/scco-large&quot;</code></pre><p>Available fields:</p><table><tr><th style="text-align: right">Field</th><th style="text-align: right">Meaning</th></tr><tr><td style="text-align: right"><code>num_ctx</code></td><td style="text-align: right">Context size sent to Ollama</td></tr><tr><td style="text-align: right"><code>system_budget</code></td><td style="text-align: right">Context reserved for the system prompt</td></tr><tr><td style="text-align: right"><code>summary_budget</code></td><td style="text-align: right">Context and generation budget for compressed memory</td></tr><tr><td style="text-align: right"><code>response_budget</code></td><td style="text-align: right">Explicit response reservation</td></tr><tr><td style="text-align: right"><code>safety_margin</code></td><td style="text-align: right">Additional context withheld from history</td></tr><tr><td style="text-align: right"><code>compression_frac</code></td><td style="text-align: right">Fraction of history capacity that triggers compression</td></tr><tr><td style="text-align: right"><code>m_verbatim</code></td><td style="text-align: right">Newest raw messages retained after compression</td></tr><tr><td style="text-align: right"><code>exact_threshold</code></td><td style="text-align: right">Threshold used by explicit hybrid token counting</td></tr><tr><td style="text-align: right"><code>num_thread</code></td><td style="text-align: right">CPU thread setting sent to Ollama; <code>0</code> leaves it to Ollama</td></tr><tr><td style="text-align: right"><code>max_tokens</code></td><td style="text-align: right">Default output-token cap</td></tr></table><p>Important constraints:</p><pre><code class="language-text hljs">num_ctx &gt;
+    system_budget +
+    summary_budget +
+    max(response_budget, max_tokens) +
+    safety_margin
+
+0 &lt; compression_frac &lt;= 1
+m_verbatim must be nonnegative and even
+num_thread must be nonnegative
+max_tokens must be positive</code></pre><p>For <code>@resume</code>, the persisted budget is retained unless <code>@budget</code> was explicitly set immediately before the resume call.</p><hr/><h1 id="Programmatic-usage"><a class="docs-heading-anchor" href="#Programmatic-usage">Programmatic usage</a><a id="Programmatic-usage-1"></a><a class="docs-heading-anchor-permalink" href="#Programmatic-usage" title="Permalink"></a></h1><p>Use programmatic sessions when code needs to inspect responses, configure callbacks, retain artifacts, or continue using a session after a terminal loop.</p><h2 id="8.-Create-a-generic-ModelSession"><a class="docs-heading-anchor" href="#8.-Create-a-generic-ModelSession">8. Create a generic <code>ModelSession</code></a><a id="8.-Create-a-generic-ModelSession-1"></a><a class="docs-heading-anchor-permalink" href="#8.-Create-a-generic-ModelSession" title="Permalink"></a></h2><pre><code class="language-julia hljs">using PhluxAI
+
+cfg = BudgetConfig(
+    num_ctx = 32768,
+    system_budget = 600,
+    summary_budget = 1200,
+    response_budget = 1024,
+    safety_margin = 512,
+    compression_frac = 0.7,
+    m_verbatim = 8,
+    exact_threshold = 200,
+    num_thread = 8,
+    max_tokens = 1024,
+)
+
+session = ModelSession(
+    &quot;gpt-oss:20b&quot;;
+    cfg,
+    system_prompt = &quot;You are a precise technical research assistant.&quot;,
+    session_dir = &quot;sessions/programmatic&quot;,
+    temperature = 0.2,
+    thinking = :high,
+    show_reasoning = false,
+    persist_reasoning = false,
+    keep_alive = &quot;30m&quot;,
+    request_timeout = 300.0,
+    read_idle_timeout = 60.0,
+    tool_mode = TOOLS_OFF,
+    sandbox_backend = SANDBOX_AUTO,
+    sandbox_network = false,
+    sandbox_timeout = 120.0,
+    discover_capabilities = true,
+    timeout = 180,
+    poll_interval = 2.0,
+    start_model = true,
+    stop_model_on_close = true,
+)</code></pre><p>Common constructor controls:</p><table><tr><th style="text-align: right">Keyword</th><th style="text-align: right">Purpose</th></tr><tr><td style="text-align: right"><code>cfg</code></td><td style="text-align: right">Context, compression, thread, and output-token configuration</td></tr><tr><td style="text-align: right"><code>system_prompt</code></td><td style="text-align: right">Generic system prompt</td></tr><tr><td style="text-align: right"><code>session_dir</code></td><td style="text-align: right">Hot/cold persistence directory</td></tr><tr><td style="text-align: right"><code>artifact_dir</code></td><td style="text-align: right">Override the artifact-store directory</td></tr><tr><td style="text-align: right"><code>sandbox_dir</code></td><td style="text-align: right">Override the tool workspace directory</td></tr><tr><td style="text-align: right"><code>base_url</code></td><td style="text-align: right">Ollama API endpoint</td></tr><tr><td style="text-align: right"><code>temperature</code></td><td style="text-align: right">Default sampling temperature</td></tr><tr><td style="text-align: right"><code>thinking</code></td><td style="text-align: right"><code>nothing</code>, boolean, symbol, string, or named thinking level</td></tr><tr><td style="text-align: right"><code>show_reasoning</code></td><td style="text-align: right">Print reasoning during streamed responses</td></tr><tr><td style="text-align: right"><code>persist_reasoning</code></td><td style="text-align: right">Persist reasoning traces in session messages</td></tr><tr><td style="text-align: right"><code>keep_alive</code></td><td style="text-align: right">Ollama model-residency policy</td></tr><tr><td style="text-align: right"><code>request_timeout</code></td><td style="text-align: right">Overall HTTP timeout; <code>0</code> disables it</td></tr><tr><td style="text-align: right"><code>read_idle_timeout</code></td><td style="text-align: right">Streaming inactivity timeout; <code>0</code> disables it</td></tr><tr><td style="text-align: right"><code>tool_mode</code></td><td style="text-align: right"><code>TOOLS_OFF</code>, <code>TOOLS_ASK</code>, or <code>TOOLS_AUTO</code></td></tr><tr><td style="text-align: right"><code>sandbox_backend</code></td><td style="text-align: right"><code>SANDBOX_AUTO</code>, <code>SANDBOX_BWRAP</code>, or <code>SANDBOX_LOCAL</code></td></tr><tr><td style="text-align: right"><code>sandbox_network</code></td><td style="text-align: right">Allow network access inside the sandbox</td></tr><tr><td style="text-align: right"><code>sandbox_timeout</code></td><td style="text-align: right">Tool-process timeout in seconds</td></tr><tr><td style="text-align: right"><code>allow_unsafe_local</code></td><td style="text-align: right">Permit the non-isolating local backend</td></tr><tr><td style="text-align: right"><code>sandbox_readonly_paths</code></td><td style="text-align: right">Host paths made available read-only</td></tr><tr><td style="text-align: right"><code>sandbox_environment</code></td><td style="text-align: right">Explicit environment values for tools</td></tr><tr><td style="text-align: right"><code>discover_capabilities</code></td><td style="text-align: right">Query Ollama model metadata during construction</td></tr><tr><td style="text-align: right"><code>image_backend</code></td><td style="text-align: right">Image-generation backend; pass a <code>ComfyBackend</code> for ComfyUI</td></tr><tr><td style="text-align: right"><code>timeout</code></td><td style="text-align: right">Model startup timeout</td></tr><tr><td style="text-align: right"><code>poll_interval</code></td><td style="text-align: right">Model startup polling interval</td></tr><tr><td style="text-align: right"><code>start_model</code></td><td style="text-align: right">Preload the model</td></tr><tr><td style="text-align: right"><code>stop_model_on_close</code></td><td style="text-align: right">Unload the model when closing</td></tr></table><p>For an externally managed or remote server:</p><pre><code class="language-julia hljs">session = ModelSession(
+    &quot;gpt-oss:20b&quot;;
+    base_url = &quot;http://192.168.1.50:11434&quot;,
+    start_model = false,
+    stop_model_on_close = false,
+)</code></pre><hr/><h2 id="9.-respond!-versus-ask!"><a class="docs-heading-anchor" href="#9.-respond!-versus-ask!">9. <code>respond!</code> versus <code>ask!</code></a><a id="9.-respond!-versus-ask!-1"></a><a class="docs-heading-anchor-permalink" href="#9.-respond!-versus-ask!" title="Permalink"></a></h2><p>Use <code>respond!</code> for the full structured response:</p><pre><code class="language-julia hljs">response = respond!(
+    session,
+    &quot;Explain the result and expose reasoning separately.&quot;;
+    thinking = :high,
+    temperature = 0.15,
+    max_tokens = 768,
+)</code></pre><p><code>respond!</code> returns a <code>ModelResponse</code>:</p><pre><code class="language-julia hljs">response.text
+response.reasoning
+response.artifacts
+response.tool_calls
+response.tool_executions
+response.done
+response.done_reason
+response.metrics</code></pre><p>Convenience predicates:</p><pre><code class="language-julia hljs">has_reasoning(response)
+has_tool_calls(response)
+response_images(response)</code></pre><p>Use <code>ask!</code> when only final text is required:</p><pre><code class="language-julia hljs">text = ask!(
+    session,
+    &quot;State only the final result.&quot;;
+    temperature = 0.1,
+    max_tokens = 384,
+)</code></pre><p>The return value of <code>ask!</code> is a <code>String</code>.</p><h3 id="Non-streaming-structured-response"><a class="docs-heading-anchor" href="#Non-streaming-structured-response">Non-streaming structured response</a><a id="Non-streaming-structured-response-1"></a><a class="docs-heading-anchor-permalink" href="#Non-streaming-structured-response" title="Permalink"></a></h3><pre><code class="language-julia hljs">response = respond!(
+    session,
+    &quot;Return a concise answer.&quot;;
+    stream = false,
+    print_tokens = false,
+)</code></pre><h3 id="Stream-into-a-selected-IO-object"><a class="docs-heading-anchor" href="#Stream-into-a-selected-IO-object">Stream into a selected IO object</a><a id="Stream-into-a-selected-IO-object-1"></a><a class="docs-heading-anchor-permalink" href="#Stream-into-a-selected-IO-object" title="Permalink"></a></h3><pre><code class="language-julia hljs">buffer = IOBuffer()
+
+response = respond!(
+    session,
+    &quot;Explain the derivation.&quot;;
+    io = buffer,
+    stream = true,
+    print_tokens = true,
+)
+
+streamed_text = String(take!(buffer))</code></pre><hr/><h2 id="10.-Change-session-defaults"><a class="docs-heading-anchor" href="#10.-Change-session-defaults">10. Change session defaults</a><a id="10.-Change-session-defaults-1"></a><a class="docs-heading-anchor-permalink" href="#10.-Change-session-defaults" title="Permalink"></a></h2><pre><code class="language-julia hljs">set_temperature!(session, 0.25)
+set_thinking!(session, :medium)
+set_reasoning_visible!(session, true)
+set_keep_alive!(session, &quot;30m&quot;)
+
+set_timeouts!(
+    session;
+    request_timeout = 600.0,
+    read_idle_timeout = 120.0,
+)</code></pre><p>Inspect the defaults:</p><pre><code class="language-julia hljs">default_temperature(session)
+default_thinking(session)
+default_keep_alive(session)
+default_tool_mode(session)</code></pre><p>A per-turn keyword passed to <code>respond!</code> or <code>ask!</code> overrides the stored default for that call only.</p><hr/><h2 id="11.-Create-a-programmatic-PhysicsAssistant"><a class="docs-heading-anchor" href="#11.-Create-a-programmatic-PhysicsAssistant">11. Create a programmatic <code>PhysicsAssistant</code></a><a id="11.-Create-a-programmatic-PhysicsAssistant-1"></a><a class="docs-heading-anchor-permalink" href="#11.-Create-a-programmatic-PhysicsAssistant" title="Permalink"></a></h2><pre><code class="language-julia hljs">assistant = PhysicsAssistant(
+    &quot;gpt-oss:20b&quot;;
+    cfg,
+    session_dir = &quot;sessions/scco-programmatic&quot;,
+    mode = DERIVE,
+    thinking = :high,
+    show_reasoning = false,
+    persist_reasoning = false,
+    tool_mode = TOOLS_ASK,
+    sandbox_backend = SANDBOX_AUTO,
+    sandbox_network = false,
+)</code></pre><p>Use its default mode:</p><pre><code class="language-julia hljs">response = respond!(
+    assistant,
+    &quot;Derive the response-function pole condition.&quot;,
+)</code></pre><p>Select a mode for one turn:</p><pre><code class="language-julia hljs">response = respond!(
+    assistant,
+    &quot;Implement the result in Julia and produce a figure.&quot;;
+    mode = CODE,
+)</code></pre><p>Text-only compatibility:</p><pre><code class="language-julia hljs">text = ask!(
+    assistant,
+    &quot;State the final instability condition.&quot;;
+    mode = DERIVE,
+)</code></pre><p>Change the persistent mode:</p><pre><code class="language-julia hljs">set_mode!(assistant, CODE)
+default_mode(assistant)</code></pre><p>Override the mode temperature:</p><pre><code class="language-julia hljs">set_temperature!(assistant, 0.05)
+default_temperature(assistant)</code></pre><p>Return to mode-dependent temperature selection:</p><pre><code class="language-julia hljs">set_temperature!(assistant, nothing)</code></pre><p><code>PhysicalAgent</code> is an alias for <code>PhysicsAssistant</code>:</p><pre><code class="language-julia hljs">assistant = PhysicalAgent(
+    &quot;gpt-oss:20b&quot;;
+    mode = CODE,
+)</code></pre><hr/><h2 id="12.-Multimodal-input"><a class="docs-heading-anchor" href="#12.-Multimodal-input">12. Multimodal input</a><a id="12.-Multimodal-input-1"></a><a class="docs-heading-anchor-permalink" href="#12.-Multimodal-input" title="Permalink"></a></h2><h3 id="Import-and-send-an-image"><a class="docs-heading-anchor" href="#Import-and-send-an-image">Import and send an image</a><a id="Import-and-send-an-image-1"></a><a class="docs-heading-anchor-permalink" href="#Import-and-send-an-image" title="Permalink"></a></h3><pre><code class="language-julia hljs">image = attach!(
+    session,
+    &quot;data/detector_scan.png&quot;,
+)
+
+input = ModelInput(
+    &quot;Identify the dominant scattering features in this image.&quot;,
+    [image],
+)
+
+response = respond!(session, input)</code></pre><p><code>attach!</code> imports the file into the session artifact store and also places it in the pending-attachment list.</p><p>Programmatic <code>respond!</code> uses exactly the <code>ModelInput</code> supplied to it. Pending attachments are included automatically only by the interactive REPL.</p><p>Clear pending attachments when they are no longer needed:</p><pre><code class="language-julia hljs">clear_attachments!(session)</code></pre><p>Inspect pending attachments:</p><pre><code class="language-julia hljs">pending_attachments(session)</code></pre><h3 id="Construct-ordered-multimodal-parts"><a class="docs-heading-anchor" href="#Construct-ordered-multimodal-parts">Construct ordered multimodal parts</a><a id="Construct-ordered-multimodal-parts-1"></a><a class="docs-heading-anchor-permalink" href="#Construct-ordered-multimodal-parts" title="Permalink"></a></h3><pre><code class="language-julia hljs">input = ModelInput([
+    TextPart(&quot;Compare these two scans.&quot;),
+    ArtifactPart(scan_a),
+    ArtifactPart(scan_b),
+])
+
+response = respond!(session, input)</code></pre><h3 id="Inspect-the-artifact-store"><a class="docs-heading-anchor" href="#Inspect-the-artifact-store">Inspect the artifact store</a><a id="Inspect-the-artifact-store-1"></a><a class="docs-heading-anchor-permalink" href="#Inspect-the-artifact-store" title="Permalink"></a></h3><pre><code class="language-julia hljs">store = artifact_store(session)
+
+store.root
+ArtifactStore.list_artifacts(store)
+ArtifactStore.verify_artifact(store, image)</code></pre><p>Artifact references contain:</p><pre><code class="language-julia hljs">image.path
+image.mime_type
+image.sha256
+image.size_bytes</code></pre><hr/><h2 id="13.-Generate-images"><a class="docs-heading-anchor" href="#13.-Generate-images">13. Generate images</a><a id="13.-Generate-images-1"></a><a class="docs-heading-anchor-permalink" href="#13.-Generate-images" title="Permalink"></a></h2><h3 id="ComfyUI-backend"><a class="docs-heading-anchor" href="#ComfyUI-backend">ComfyUI backend</a><a id="ComfyUI-backend-1"></a><a class="docs-heading-anchor-permalink" href="#ComfyUI-backend" title="Permalink"></a></h3><p>Construct a backend from an API-format workflow and bindings:</p><pre><code class="language-julia hljs">bindings = ComfyBindings(
+    positive_prompt = WorkflowBinding(&quot;6&quot;, &quot;text&quot;),
+    model = WorkflowBinding(&quot;4&quot;, &quot;ckpt_name&quot;),
+    negative_prompt = WorkflowBinding(&quot;7&quot;, &quot;text&quot;),
+    seed = WorkflowBinding(&quot;3&quot;, &quot;seed&quot;),
+    width = WorkflowBinding(&quot;5&quot;, &quot;width&quot;),
+    height = WorkflowBinding(&quot;5&quot;, &quot;height&quot;),
+    steps = WorkflowBinding(&quot;3&quot;, &quot;steps&quot;),
+    cfg_scale = WorkflowBinding(&quot;3&quot;, &quot;cfg&quot;),
+)
+
+backend = ComfyBackend(
+    &quot;/path/to/workflow_api.json&quot;,
+    bindings;
+    model = &quot;sd_xl_base_1.0.safetensors&quot;,
+)</code></pre><p><code>ComfyBackend</code> defaults to <code>http://127.0.0.1:8188</code> and <code>loopback_only=true</code>. It communicates with ComfyUI through local HTTP polling using <code>/prompt</code>, <code>/history/{prompt_id}</code>, and <code>/view</code>.</p><p>Check server availability:</p><pre><code class="language-julia hljs">comfy_available(backend)</code></pre><p>Load and validate a workflow without constructing a backend:</p><pre><code class="language-julia hljs">workflow = load_comfy_workflow(&quot;/path/to/workflow_api.json&quot;)</code></pre><h3 id="Attach-the-backend-to-a-session"><a class="docs-heading-anchor" href="#Attach-the-backend-to-a-session">Attach the backend to a session</a><a id="Attach-the-backend-to-a-session-1"></a><a class="docs-heading-anchor-permalink" href="#Attach-the-backend-to-a-session" title="Permalink"></a></h3><pre><code class="language-julia hljs">session = ModelSession(
+    &quot;qwen3-vl:4b&quot;;
+    image_backend = backend,
+)</code></pre><p>A backend can also be changed later:</p><pre><code class="language-julia hljs">set_image_backend!(session, backend)
+default_image_backend(session)</code></pre><p>Generate through the session:</p><pre><code class="language-julia hljs">response = generate_images!(
+    session,
+    &quot;Publication-style schematic of a two-leg spin ladder&quot;;
+    negative_prompt = &quot;blurry, illegible labels&quot;,
+    width = 1024,
+    height = 1024,
+    count = 1,
+    seed = 1234,
+    steps = 30,
+    cfg_scale = 7.0,
+    sampler_name = &quot;euler_ancestral&quot;,
+    scheduler = &quot;normal&quot;,
+    filename_prefix = &quot;spin-ladder&quot;,
+)</code></pre><p>Optional values are applied only when the selected workflow exposes the corresponding binding. For example, passing <code>width=1024</code> requires a configured <code>width</code> binding.</p><p>Inspect generated files:</p><pre><code class="language-julia hljs">for image in response_images(response)
+    println(image.path)
+    println(image.mime_type)
+    println(image.sha256)
+end</code></pre><h3 id="Backend-neutral-request-object"><a class="docs-heading-anchor" href="#Backend-neutral-request-object">Backend-neutral request object</a><a id="Backend-neutral-request-object-1"></a><a class="docs-heading-anchor-permalink" href="#Backend-neutral-request-object" title="Permalink"></a></h3><pre><code class="language-julia hljs">request = ImageGenerationRequest(
+    &quot;A reciprocal-space intensity map with fourfold symmetry&quot;;
+    width = 1024,
+    height = 1024,
+    seed = 1234,
+    steps = 30,
+    cfg_scale = 6.5,
+)
+
+response = generate_images!(session, request)</code></pre><h3 id="Generate-directly-through-a-backend"><a class="docs-heading-anchor" href="#Generate-directly-through-a-backend">Generate directly through a backend</a><a id="Generate-directly-through-a-backend-1"></a><a class="docs-heading-anchor-permalink" href="#Generate-directly-through-a-backend" title="Permalink"></a></h3><p>The low-level form requires an explicit artifact store:</p><pre><code class="language-julia hljs">store = ArtifactStore.Store(&quot;generated-images&quot;)
+
+response = generate_images(
+    backend,
+    &quot;A publication-style scientific schematic&quot;;
+    artifact_store = store,
+    width = 1024,
+    height = 1024,
+)</code></pre><h3 id="Explicit-backend-construction-in-an-interactive-macro"><a class="docs-heading-anchor" href="#Explicit-backend-construction-in-an-interactive-macro">Explicit backend construction in an interactive macro</a><a id="Explicit-backend-construction-in-an-interactive-macro-1"></a><a class="docs-heading-anchor-permalink" href="#Explicit-backend-construction-in-an-interactive-macro" title="Permalink"></a></h3><pre><code class="language-julia hljs">@model &quot;qwen3-vl:4b&quot; image=ComfyBackend(
+    &quot;/path/to/workflow_api.json&quot;,
+    bindings;
+    model = &quot;sd_xl_base_1.0.safetensors&quot;,
+)</code></pre><h3 id="Ollama-image-generation-compatibility"><a class="docs-heading-anchor" href="#Ollama-image-generation-compatibility">Ollama image-generation compatibility</a><a id="Ollama-image-generation-compatibility-1"></a><a class="docs-heading-anchor-permalink" href="#Ollama-image-generation-compatibility" title="Permalink"></a></h3><p>A <code>ModelSession</code> without an explicit <code>image_backend</code> currently receives an <code>OllamaImageBackend</code> for compatibility. The older Ollama image transports can still be selected with <code>backend=:auto</code>, <code>:http</code>, or <code>:cli</code> and their related keywords.</p><p>For the local ComfyUI path, prefer a concrete <code>ComfyBackend</code> or the <code>@imagemodel</code>/<code>image=...</code> user-facing API. Do not mix <code>backend=</code> and <code>image_backend=</code> in the same image-generation call.</p><hr/><h2 id="14.-Tool-execution-with-jupy-and-jupip"><a class="docs-heading-anchor" href="#14.-Tool-execution-with-jupy-and-jupip">14. Tool execution with <code>jupy</code> and <code>jupip</code></a><a id="14.-Tool-execution-with-jupy-and-jupip-1"></a><a class="docs-heading-anchor-permalink" href="#14.-Tool-execution-with-jupy-and-jupip" title="Permalink"></a></h2><p>Tool execution requires:</p><pre><code class="language-text hljs">jupy
+jupip</code></pre><p>Both executables must be on <code>PATH</code>, unless explicit paths are supplied through a custom <code>ToolContext</code>.</p><p>The default registered tools are:</p><table><tr><th style="text-align: right">Tool</th><th style="text-align: right">Risk</th><th style="text-align: right">Purpose</th></tr><tr><td style="text-align: right"><code>write_text_file</code></td><td style="text-align: right"><code>TOOL_WRITE</code></td><td style="text-align: right">Write UTF-8 text in the workspace</td></tr><tr><td style="text-align: right"><code>read_text_file</code></td><td style="text-align: right"><code>TOOL_READ</code></td><td style="text-align: right">Read a bounded UTF-8 text file</td></tr><tr><td style="text-align: right"><code>list_files</code></td><td style="text-align: right"><code>TOOL_READ</code></td><td style="text-align: right">List workspace files</td></tr><tr><td style="text-align: right"><code>run_julia_script</code></td><td style="text-align: right"><code>TOOL_EXECUTE</code></td><td style="text-align: right">Run a Julia script through <code>jupy</code></td></tr><tr><td style="text-align: right"><code>install_python_packages</code></td><td style="text-align: right"><code>TOOL_NETWORK</code></td><td style="text-align: right">Install packages through <code>jupip</code></td></tr><tr><td style="text-align: right"><code>inspect_python_package</code></td><td style="text-align: right"><code>TOOL_READ</code></td><td style="text-align: right">Run <code>jupip show</code></td></tr><tr><td style="text-align: right"><code>collect_artifacts</code></td><td style="text-align: right"><code>TOOL_READ</code></td><td style="text-align: right">Copy workspace files to the artifact store</td></tr></table><h3 id="Tool-modes"><a class="docs-heading-anchor" href="#Tool-modes">Tool modes</a><a id="Tool-modes-1"></a><a class="docs-heading-anchor-permalink" href="#Tool-modes" title="Permalink"></a></h3><pre><code class="language-julia hljs">set_tool_mode!(session, TOOLS_OFF)
+set_tool_mode!(session, TOOLS_ASK)
+set_tool_mode!(session, TOOLS_AUTO)</code></pre><p>Behavior:</p><ul><li><code>TOOLS_OFF</code> does not expose tools to the model.</li><li><code>TOOLS_ASK</code> requires an approval callback for every tool.</li><li><code>TOOLS_AUTO</code> automatically approves non-network tools.</li><li>Network-capable package installation always requires explicit approval.</li></ul><h3 id="Programmatic-approval-callback"><a class="docs-heading-anchor" href="#Programmatic-approval-callback">Programmatic approval callback</a><a id="Programmatic-approval-callback-1"></a><a class="docs-heading-anchor-permalink" href="#Programmatic-approval-callback" title="Permalink"></a></h3><pre><code class="language-julia hljs">function approve_tool(
+    call::ToolCall,
+    risk::ToolRisk,
+)::Bool
+    println(&quot;Requested tool: &quot;, call.name)
+    println(&quot;Risk: &quot;, risk)
+    println(&quot;Arguments: &quot;, call.arguments_json)
+
+    # Example policy: deny network mutation, approve other registered tools.
+    return risk != TOOL_NETWORK
+end
+
+response = respond!(
+    session,
+    &quot;&quot;&quot;
+    Write a Julia script that samples sin(x), creates a PNG plot, runs the
+    script through jupy, and return the generated artifact.
+    &quot;&quot;&quot;;
+    tool_mode = TOOLS_ASK,
+    approval_callback = approve_tool,
+    max_tool_steps = 8,
+)</code></pre><p>Inspect the executions:</p><pre><code class="language-julia hljs">for execution in response.tool_executions
+    println(&quot;Tool: &quot;, execution.name)
+    println(&quot;Success: &quot;, execution.success)
+    println(&quot;Exit code: &quot;, execution.exit_code)
+    println(execution.output)
+
+    for artifact in execution.artifacts
+        println(&quot;Artifact: &quot;, artifact.path)
+    end
+end</code></pre><h3 id="Use-custom-jupy-and-jupip-paths"><a class="docs-heading-anchor" href="#Use-custom-jupy-and-jupip-paths">Use custom <code>jupy</code> and <code>jupip</code> paths</a><a id="Use-custom-jupy-and-jupip-paths-1"></a><a class="docs-heading-anchor-permalink" href="#Use-custom-jupy-and-jupip-paths" title="Permalink"></a></h3><pre><code class="language-julia hljs">context = ToolContext(
+    sandbox_config(session),
+    artifact_store(session);
+    jupy_executable = &quot;/home/user/.local/bin/jupy&quot;,
+    jupip_executable = &quot;/home/user/.local/bin/jupip&quot;,
+)
+
+set_tool_context!(session, context)
+set_tool_mode!(session, TOOLS_ASK)</code></pre><hr/><h2 id="15.-Sandbox-configuration"><a class="docs-heading-anchor" href="#15.-Sandbox-configuration">15. Sandbox configuration</a><a id="15.-Sandbox-configuration-1"></a><a class="docs-heading-anchor-permalink" href="#15.-Sandbox-configuration" title="Permalink"></a></h2><p>The preferred Linux backend is bubblewrap:</p><pre><code class="language-julia hljs">session = ModelSession(
+    &quot;gpt-oss:20b&quot;;
+    tool_mode = TOOLS_ASK,
+    sandbox_backend = SANDBOX_BWRAP,
+    sandbox_network = false,
+)</code></pre><p>Automatic selection:</p><pre><code class="language-julia hljs">sandbox_backend = SANDBOX_AUTO</code></pre><p><code>SANDBOX_AUTO</code> selects bubblewrap when <code>bwrap</code> is available. It does not fall back to local execution unless <code>allow_unsafe_local=true</code>.</p><p>Explicit local execution:</p><pre><code class="language-julia hljs">session = ModelSession(
+    &quot;gpt-oss:20b&quot;;
+    tool_mode = TOOLS_ASK,
+    sandbox_backend = SANDBOX_LOCAL,
+    allow_unsafe_local = true,
+)</code></pre><p><code>SANDBOX_LOCAL</code> constrains paths and uses a session-local home and Julia depot, but it is not a security boundary.</p><p>Useful settings:</p><pre><code class="language-julia hljs">session = ModelSession(
+    &quot;gpt-oss:20b&quot;;
+    tool_mode = TOOLS_ASK,
+    sandbox_backend = SANDBOX_AUTO,
+    sandbox_network = false,
+    sandbox_timeout = 120.0,
+    sandbox_readonly_paths = [pwd()],
+    sandbox_environment = Dict(
+        &quot;JULIA_NUM_THREADS&quot; =&gt; &quot;8&quot;,
+    ),
+)</code></pre><p>Inspect the active configuration:</p><pre><code class="language-julia hljs">config = sandbox_config(session)
+
+config.workspace
+config.backend
+config.network
+config.timeout_seconds
+config.max_output_bytes
+config.readonly_paths
+config.environment</code></pre><p>All model-supplied file paths must remain relative to the sandbox workspace. Absolute paths and path traversal outside the workspace are rejected.</p><hr/><h2 id="16.-Diagnostics"><a class="docs-heading-anchor" href="#16.-Diagnostics">16. Diagnostics</a><a id="16.-Diagnostics-1"></a><a class="docs-heading-anchor-permalink" href="#16.-Diagnostics" title="Permalink"></a></h2><p>Obtain metrics from the structured response:</p><pre><code class="language-julia hljs">response = respond!(
+    session,
+    &quot;Give a concise explanation.&quot;;
+)
+
+metrics = response.metrics</code></pre><p>Or inspect the most recent session result:</p><pre><code class="language-julia hljs">last_response(session)
+last_response_metrics(session)</code></pre><p>Available metric fields:</p><pre><code class="language-julia hljs">metrics.total_duration_ns
+metrics.load_duration_ns
+metrics.prompt_eval_count
+metrics.prompt_eval_duration_ns
+metrics.eval_count
+metrics.eval_duration_ns
+metrics.client_total_duration_ns
+metrics.time_to_first_token_ns</code></pre><p>Convert durations and calculate throughput:</p><pre><code class="language-julia hljs">ns_to_s(value::Integer)::Float64 = value / 1.0e9
+
+println(
+    &quot;Client time: &quot;,
+    round(ns_to_s(metrics.client_total_duration_ns); digits = 3),
+    &quot; s&quot;,
+)
+
+if !isnothing(metrics.time_to_first_token_ns)
+    println(
+        &quot;Time to first token: &quot;,
+        round(ns_to_s(metrics.time_to_first_token_ns); digits = 3),
+        &quot; s&quot;,
+    )
+end
+
+println(
+    &quot;Prompt throughput: &quot;,
+    round(prompt_rate(metrics); digits = 2),
+    &quot; tokens/s&quot;,
+)
+
+println(
+    &quot;Generation throughput: &quot;,
+    round(generation_rate(metrics); digits = 2),
+    &quot; tokens/s&quot;,
+)</code></pre><p>A reusable formatter:</p><pre><code class="language-julia hljs">function print_diagnostics(value)::Nothing
+    metrics = last_response_metrics(value)
+
+    if isnothing(metrics)
+        println(&quot;No response metrics are available.&quot;)
+        return nothing
+    end
+
+    ns_to_s(value::Integer)::Float64 = value / 1.0e9
+
+    println(&quot;Server total:  &quot;,
+            round(ns_to_s(metrics.total_duration_ns); digits = 3), &quot; s&quot;)
+    println(&quot;Model load:    &quot;,
+            round(ns_to_s(metrics.load_duration_ns); digits = 3), &quot; s&quot;)
+    println(&quot;Client total:  &quot;,
+            round(ns_to_s(metrics.client_total_duration_ns); digits = 3), &quot; s&quot;)
+    println(&quot;Prompt tokens: &quot;, metrics.prompt_eval_count)
+    println(&quot;Output tokens: &quot;, metrics.eval_count)
+    println(&quot;Prompt rate:   &quot;,
+            round(prompt_rate(metrics); digits = 2), &quot; tokens/s&quot;)
+    println(&quot;Output rate:   &quot;,
+            round(generation_rate(metrics); digits = 2), &quot; tokens/s&quot;)
+
+    if isnothing(metrics.time_to_first_token_ns)
+        println(&quot;First token:   unavailable&quot;)
+    else
+        println(
+            &quot;First token:   &quot;,
+            round(
+                ns_to_s(metrics.time_to_first_token_ns);
+                digits = 3,
+            ),
+            &quot; s&quot;,
+        )
+    end
+
+    return nothing
+end</code></pre><p>This works with both <code>ModelSession</code> and <code>PhysicsAssistant</code>:</p><pre><code class="language-julia hljs">print_diagnostics(session)
+print_diagnostics(assistant)</code></pre><hr/><h2 id="17.-Model-capability-inspection"><a class="docs-heading-anchor" href="#17.-Model-capability-inspection">17. Model capability inspection</a><a id="17.-Model-capability-inspection-1"></a><a class="docs-heading-anchor-permalink" href="#17.-Model-capability-inspection" title="Permalink"></a></h2><p>Query a model directly:</p><pre><code class="language-julia hljs">caps = model_capabilities(
+    &quot;gpt-oss:20b&quot;;
+    base_url = &quot;http://localhost:11434&quot;,
+)
+
+capability_names(caps)
+supports(caps, :completion)
+supports(caps, :thinking)
+supports(caps, :tools)
+supports(caps, :vision)
+supports(caps, :image_generation)</code></pre><p>Require a capability:</p><pre><code class="language-julia hljs">require_capability(caps, :vision)</code></pre><p>Inspect additional model metadata:</p><pre><code class="language-julia hljs">details = show_model_details(
+    &quot;gpt-oss:20b&quot;;
+    verbose = true,
+)
+
+details.model
+details.family
+details.format
+details.parameter_size
+details.quantization_level
+details.capabilities</code></pre><p>Inspect capability discovery cached by a session:</p><pre><code class="language-julia hljs">caps = model_capabilities(session)</code></pre><p>The value can be <code>nothing</code> when discovery was disabled or the metadata request failed.</p><hr/><h2 id="18.-Persistence-and-resume"><a class="docs-heading-anchor" href="#18.-Persistence-and-resume">18. Persistence and resume</a><a id="18.-Persistence-and-resume-1"></a><a class="docs-heading-anchor-permalink" href="#18.-Persistence-and-resume" title="Permalink"></a></h2><p>Save a session explicitly:</p><pre><code class="language-julia hljs">save(session)</code></pre><p>Wait for background compression before continuing:</p><pre><code class="language-julia hljs">compression_running(session)
+await_compression!(session)
+save(session)</code></pre><p>Close the session:</p><pre><code class="language-julia hljs">close(session)</code></pre><p>Resume a generic session programmatically:</p><pre><code class="language-julia hljs">session = load_model_session(
+    &quot;gpt-oss:20b&quot;,
+    &quot;sessions/programmatic&quot;;
+    temperature = 0.2,
+    thinking = :high,
+    tool_mode = TOOLS_OFF,
+)</code></pre><p>Resume a physics session:</p><pre><code class="language-julia hljs">assistant = load_assistant(
+    &quot;gpt-oss:20b&quot;,
+    &quot;sessions/scco-programmatic&quot;;
+    mode = DERIVE,
+    thinking = :high,
+)</code></pre><p>Equivalent alias:</p><pre><code class="language-julia hljs">assistant = load_physical_agent(
+    &quot;gpt-oss:20b&quot;,
+    &quot;sessions/scco-programmatic&quot;,
+)</code></pre><p>Inspect session identity and locations:</p><pre><code class="language-julia hljs">model_name(session)
+base_url(session)
+session_directory(session)
+system_prompt(session)
+artifact_store(session).root
+sandbox_config(session).workspace
+isopen(session)</code></pre><hr/><h2 id="19.-Enter-a-terminal-loop-from-a-retained-object"><a class="docs-heading-anchor" href="#19.-Enter-a-terminal-loop-from-a-retained-object">19. Enter a terminal loop from a retained object</a><a id="19.-Enter-a-terminal-loop-from-a-retained-object-1"></a><a class="docs-heading-anchor-permalink" href="#19.-Enter-a-terminal-loop-from-a-retained-object" title="Permalink"></a></h2><p>A programmatic session can enter the same interactive loop without losing the object:</p><pre><code class="language-julia hljs">session = ModelSession(
+    &quot;gpt-oss:20b&quot;;
+    session_dir = &quot;sessions/retained&quot;,
+)
+
+repl(session; close_on_exit = false)
+
+# Execution continues here after \exit or \quit.
+save(session)
+close(session)</code></pre><p>Physics assistant:</p><pre><code class="language-julia hljs">assistant = PhysicsAssistant(
+    &quot;gpt-oss:20b&quot;;
+    session_dir = &quot;sessions/physics-retained&quot;,
+)
+
+repl(assistant; close_on_exit = false)
+
+save(assistant)
+close(assistant)</code></pre><hr/><h2 id="20.-Low-level-model-lifecycle"><a class="docs-heading-anchor" href="#20.-Low-level-model-lifecycle">20. Low-level model lifecycle</a><a id="20.-Low-level-model-lifecycle-1"></a><a class="docs-heading-anchor-permalink" href="#20.-Low-level-model-lifecycle" title="Permalink"></a></h2><p>The low-level client is available as <code>PhluxAI.OllamaClient</code>:</p><pre><code class="language-julia hljs">const OC = PhluxAI.OllamaClient</code></pre><p>Preload a model:</p><pre><code class="language-julia hljs">OC.start_model!(
+    &quot;gpt-oss:20b&quot;;
+    timeout = 180,
+    poll_interval = 2.0,
+)</code></pre><p>Unload it:</p><pre><code class="language-julia hljs">OC.stop_model!(&quot;gpt-oss:20b&quot;)</code></pre><p>Custom endpoint:</p><pre><code class="language-julia hljs">OC.start_model!(
+    &quot;gpt-oss:20b&quot;,
+    &quot;http://192.168.1.50:11434&quot;;
+    timeout = 180,
+    poll_interval = 2.0,
+)
+
+OC.stop_model!(
+    &quot;gpt-oss:20b&quot;,
+    &quot;http://192.168.1.50:11434&quot;,
+)</code></pre><hr/><h2 id="21.-Complete-generic-example"><a class="docs-heading-anchor" href="#21.-Complete-generic-example">21. Complete generic example</a><a id="21.-Complete-generic-example-1"></a><a class="docs-heading-anchor-permalink" href="#21.-Complete-generic-example" title="Permalink"></a></h2><pre><code class="language-julia hljs">using PhluxAI
+
+cfg = BudgetConfig(
+    num_ctx = 32768,
+    summary_budget = 1200,
+    response_budget = 1024,
+    safety_margin = 512,
+    m_verbatim = 8,
+    num_thread = 8,
+    max_tokens = 1024,
+)
+
+session = ModelSession(
+    &quot;gpt-oss:20b&quot;;
+    cfg,
+    session_dir = &quot;sessions/full-example&quot;,
+    temperature = 0.2,
+    thinking = :high,
+    show_reasoning = false,
+    persist_reasoning = false,
+    keep_alive = &quot;30m&quot;,
+    request_timeout = 300.0,
+    read_idle_timeout = 60.0,
+    tool_mode = TOOLS_ASK,
+    sandbox_backend = SANDBOX_AUTO,
+    sandbox_network = false,
+    sandbox_timeout = 120.0,
+)
+
+function approve_tool(call::ToolCall, risk::ToolRisk)::Bool
+    println(&quot;Tool request: &quot;, call.name, &quot; [&quot;, risk, &quot;]&quot;)
+    return risk != TOOL_NETWORK
+end
+
+try
+    response = respond!(
+        session,
+        &quot;&quot;&quot;
+        Write a Julia script that evaluates sin(x), creates a PNG plot,
+        executes it through jupy, and returns the figure artifact.
+        &quot;&quot;&quot;;
+        approval_callback = approve_tool,
+        max_tool_steps = 8,
+    )
+
+    println(&quot;\nFinal text:&quot;)
+    println(response.text)
+
+    if has_reasoning(response)
+        println(&quot;\nReasoning was returned separately.&quot;)
+    end
+
+    for execution in response.tool_executions
+        println(&quot;\nTool: &quot;, execution.name)
+        println(&quot;Success: &quot;, execution.success)
+        println(execution.output)
+
+        for artifact in execution.artifacts
+            println(&quot;Generated: &quot;, artifact.path)
+        end
+    end
+
+    print_diagnostics(session)
+    save(session)
+finally
+    close(session)
+end</code></pre><hr/><h2 id="22.-Complete-multimodal-physics-example"><a class="docs-heading-anchor" href="#22.-Complete-multimodal-physics-example">22. Complete multimodal physics example</a><a id="22.-Complete-multimodal-physics-example-1"></a><a class="docs-heading-anchor-permalink" href="#22.-Complete-multimodal-physics-example" title="Permalink"></a></h2><pre><code class="language-julia hljs">using PhluxAI
+
+assistant = PhysicsAssistant(
+    &quot;gpt-oss:20b&quot;;
+    session_dir = &quot;sessions/multimodal-physics&quot;,
+    mode = DERIVE,
+    thinking = :high,
+    show_reasoning = false,
+    tool_mode = TOOLS_OFF,
+)
+
+try
+    scan = attach!(
+        assistant,
+        &quot;data/detector_scan.png&quot;,
+    )
+
+    input = ModelInput(
+        &quot;&quot;&quot;
+        Analyze the attached detector scan. Identify the dominant feature,
+        state the assumptions used, and distinguish observation from
+        interpretation.
+        &quot;&quot;&quot;,
+        [scan],
+    )
+
+    response = respond!(
+        assistant,
+        input;
+        mode = DERIVE,
+        temperature = 0.1,
+        max_tokens = 1024,
+    )
+
+    println(response.text)
+    print_diagnostics(assistant)
+    save(assistant)
+finally
+    close(assistant)
+end</code></pre><hr/><h2 id="23.-Operational-notes"><a class="docs-heading-anchor" href="#23.-Operational-notes">23. Operational notes</a><a id="23.-Operational-notes-1"></a><a class="docs-heading-anchor-permalink" href="#23.-Operational-notes" title="Permalink"></a></h2><ul><li><code>ask!</code> returns only final text. Use <code>respond!</code> for reasoning, artifacts, tool calls, tool results, and diagnostics.</li><li><code>@model</code> and <code>@agent</code> select the Ollama text/vision model. They do not imply a ComfyUI image checkpoint unless <code>image=...</code> is supplied or a pending <code>@imagemodel</code> selection exists.</li><li><code>@imagemodel</code> is one-shot and is consumed by the next <code>@model</code> or <code>@agent</code>.</li><li><code>@imagemodel</code> requires a default ComfyUI workflow with <code>bindings.model</code>.</li><li><code>\image PROMPT</code> uses the image backend already attached to the active session; it does not select a model on its own.</li><li>A ComfyUI image-model filename and a ComfyUI workflow are separate. The model name is written into the workflow loader input identified by <code>bindings.model</code>.</li><li>ComfyUI must be running before a <code>ComfyBackend</code> can generate images.</li><li>Image-model weights, the ComfyUI checkout, <code>.venv</code>, and generated images are runtime/user data and should not be committed to the PhluxAI source repository.</li><li>A workflow may be stored anywhere. Commit only small reference workflows that are intentionally part of project examples or tests.</li><li>Tool execution is disabled by default.</li><li><code>TOOLS_AUTO</code> does not automatically approve network-capable package installation.</li><li>Keep sandbox networking disabled unless a specific task requires it.</li><li>Prefer <code>SANDBOX_BWRAP</code> or <code>SANDBOX_AUTO</code> on Linux.</li><li><code>SANDBOX_LOCAL</code> is not a security boundary.</li><li>Image input requires a compatible Ollama vision model. Image output depends on the configured image backend and workflow.</li><li>Named thinking levels require a model that understands them.</li><li>Reasoning display and reasoning persistence are separate controls.</li><li>Programmatic pending attachments are not added implicitly; construct a <code>ModelInput</code> with the desired artifacts.</li><li>Call <code>close</code> in a <code>finally</code> block for programmatic sessions.</li></ul></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../../">« Home</a><a class="docs-footer-nextpage" href="../../installation/build/">Build and external runtimes »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Friday 7 August 2026 22:01">Friday 7 August 2026</span>. Using Julia version 1.12.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
