@@ -2,7 +2,7 @@
 
 [![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://alt-f4-dev.github.io/PhluxAI.jl/dev/)
 
-PhluxAI.jl is a local multimodal agent framework for Julia. It combines:
+PhluxAI.jl is a local multimodal agent framework for Julia that combines:
 
 - Ollama for text and vision models;
 - ComfyUI for local image generation;
@@ -15,7 +15,7 @@ The package provides both interactive macros such as `@model`, `@agent`, and
 `@imagemodel`, and programmatic APIs such as `ModelSession`,
 `PhysicsAssistant`, `respond!`, `generate_images!`, and `ComfyBackend`.
 
-Current development version: `0.2.0`.
+Current development version: `0.0.1`.
 
 ## Architecture
 
