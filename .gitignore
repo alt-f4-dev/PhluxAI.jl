@@ -1,0 +1,13 @@
+#Documenter.jl 
+docs/build/
+
+#Jupy project environment
+LocalPreferences.toml
+.CondaPkg/
+.venv/
+
+#Build output
+deps/build.log
+
+#generated files
+requirements.txt

@@ -1,0 +1,10 @@
+[deps]
+Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
+PhluxAI = "f32cc56f-fe97-4c8d-9d6c-4c41f62a4ff4"
+
+[sources]
+PhluxAI = {path = ".."}
+
+[compat]
+Documenter = "1"
+julia = "1.12"
