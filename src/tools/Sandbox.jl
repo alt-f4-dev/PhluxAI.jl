@@ -190,9 +190,12 @@ function _bwrap_command(
         "--unshare-uts",
         "--unshare-ipc",
         "--clearenv",
-        "--ro-bind",
-        "/",
-        "/",
+        "--ro-bind", "/usr", "/usr",
+        "--ro-bind-try", "/bin", "/bin",
+        "--ro-bind-try", "/sbin", "/sbin",
+        "--ro-bind-try", "/lib", "/lib",
+        "--ro-bind-try", "/lib64", "/lib64",
+        "--ro-bind-try", "/etc/ld.so.cache", "/etc/ld.so.cache",
         "--proc",
         "/proc",
         "--dev",
@@ -262,6 +265,10 @@ function _local_command(
 )::Cmd
     config.allow_unsafe_local || throw(ArgumentError(
         "unsafe local execution is disabled",
+    ))
+    config.network || throw(ArgumentError(
+        "SANDBOX_LOCAL cannot enforce network=false; " *
+        "use SANDBOX_BWRAP for network isolation",
     ))
     env = copy(ENV)
     env["HOME"] = joinpath(config.workspace, "home")
