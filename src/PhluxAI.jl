@@ -11,12 +11,16 @@ include("tools/Sandbox.jl")
 include("tools/JupyTools.jl")
 include("core/OllamaClient.jl")
 include("core/ComfyClient.jl")
+include("core/ComfyWorkflow.jl")
+include("core/ComfyLifecycle.jl")
 include("core/ModelSession.jl")
 include("agents/PhysicalAssistant.jl")
 
 import .ArtifactStore
 import .CapabilityDiscovery
 import .ComfyClient
+import .ComfyWorkflow
+import .ComfyLifecycle
 import .ImageInterface
 import .JupyTools
 import .ModelSessions
@@ -110,270 +114,128 @@ const _GENERIC_SESSION_TYPE = "generic"
 # Unified high-level API
 # -----------------------------------------------------------------------------
 
-respond!(session::ModelSession, input; kwargs...) =
-    ModelSessions.respond!(session, input; kwargs...)
+respond!(session::ModelSession, input; kwargs...) = ModelSessions.respond!(session, input; kwargs...)
 
-respond!(assistant::PhysicsAssistant, input; kwargs...) =
-    PhysicalAssistant.respond!(assistant, input; kwargs...)
+respond!(assistant::PhysicsAssistant, input; kwargs...) = PhysicalAssistant.respond!(assistant, input; kwargs...)
 
-generate_images(
-    backend::AbstractImageBackend,
-    request::ImageGenerationRequest,
-    store::ArtifactStore.Store,
-)::ModelResponse = ImageInterface.generate_images(
-    backend,
-    request,
-    store,
-)
+generate_images(backend::AbstractImageBackend, request::ImageGenerationRequest, store::ArtifactStore.Store)::ModelResponse = ImageInterface.generate_images(backend, request, store)
 
-generate_images(
-    backend::AbstractImageBackend,
-    prompt::AbstractString;
-    artifact_store::ArtifactStore.Store,
-    kwargs...,
-)::ModelResponse = ImageInterface.generate_images(
-    backend,
-    prompt,
-    artifact_store;
-    kwargs...,
-)
+generate_images(backend::AbstractImageBackend, prompt::AbstractString; artifact_store::ArtifactStore.Store, kwargs...)::ModelResponse = ImageInterface.generate_images(backend, prompt, artifact_store; kwargs...)
 
-generate_images(
-    model::OllamaModel,
-    prompt::AbstractString;
-    kwargs...,
-)::ModelResponse = OllamaClient.generate_images(model, prompt; kwargs...)
+generate_images(model::OllamaModel, prompt::AbstractString; kwargs...)::ModelResponse = OllamaClient.generate_images(model, prompt; kwargs...)
 
-generate_images!(
-    session::ModelSession,
-    request::ImageGenerationRequest;
-    kwargs...,
-)::ModelResponse = ModelSessions.generate_images!(
-    session,
-    request;
-    kwargs...,
-)
+generate_images!(session::ModelSession, request::ImageGenerationRequest; kwargs...)::ModelResponse = ModelSessions.generate_images!(session, request; kwargs...)
 
-generate_images!(
-    session::ModelSession,
-    prompt::AbstractString;
-    kwargs...,
-)::ModelResponse = ModelSessions.generate_images!(
-    session,
-    prompt;
-    kwargs...,
-)
+generate_images!(session::ModelSession, prompt::AbstractString; kwargs...)::ModelResponse = ModelSessions.generate_images!(session, prompt; kwargs...)
 
-generate_images!(
-    assistant::PhysicsAssistant,
-    request::ImageGenerationRequest;
-    kwargs...,
-)::ModelResponse = PhysicalAssistant.generate_images!(
-    assistant,
-    request;
-    kwargs...,
-)
+generate_images!(assistant::PhysicsAssistant, request::ImageGenerationRequest; kwargs...)::ModelResponse = PhysicalAssistant.generate_images!(assistant, request; kwargs...)
 
-generate_images!(
-    assistant::PhysicsAssistant,
-    prompt::AbstractString;
-    kwargs...,
-)::ModelResponse = PhysicalAssistant.generate_images!(
-    assistant,
-    prompt;
-    kwargs...,
-)
+generate_images!(assistant::PhysicsAssistant, prompt::AbstractString; kwargs...)::ModelResponse = PhysicalAssistant.generate_images!(assistant, prompt; kwargs...)
 
-load_comfy_workflow(path::AbstractString)::Dict{String,Any} =
-    ComfyClient.load_workflow(path)
+load_comfy_workflow(path::AbstractString)::Dict{String,Any} = ComfyClient.load_workflow(path)
 
-comfy_available(backend::ComfyBackend)::Bool =
-    ComfyClient.available(backend)
+comfy_available(backend::ComfyBackend)::Bool = ComfyClient.available(backend)
 
 save(session::ModelSession)::Nothing = ModelSessions.save(session)
-save(assistant::PhysicsAssistant)::Nothing =
-    PhysicalAssistant.save(assistant)
+save(assistant::PhysicsAssistant)::Nothing = PhysicalAssistant.save(assistant)
 
-repl(session::ModelSession; kwargs...)::Nothing =
-    ModelSessions.repl(session; kwargs...)
+repl(session::ModelSession; kwargs...)::Nothing = ModelSessions.repl(session; kwargs...)
 
-repl(assistant::PhysicsAssistant; kwargs...)::Nothing =
-    PhysicalAssistant.repl(assistant; kwargs...)
+repl(assistant::PhysicsAssistant; kwargs...)::Nothing = PhysicalAssistant.repl(assistant; kwargs...)
 
-load_model_session(args...; kwargs...) =
-    ModelSessions.load_model_session(args...; kwargs...)
+load_model_session(args...; kwargs...) = ModelSessions.load_model_session(args...; kwargs...)
 
-load_assistant(args...; kwargs...) =
-    PhysicalAssistant.load_assistant(args...; kwargs...)
+load_assistant(args...; kwargs...) = PhysicalAssistant.load_assistant(args...; kwargs...)
 
-load_physical_agent(args...; kwargs...) =
-    PhysicalAssistant.load_physical_agent(args...; kwargs...)
+load_physical_agent(args...; kwargs...) = PhysicalAssistant.load_physical_agent(args...; kwargs...)
 
-model_name(value::ModelSession)::String =
-    ModelSessions.model_name(value)
-model_name(value::PhysicsAssistant)::String =
-    PhysicalAssistant.model_name(value)
+model_name(value::ModelSession)::String = ModelSessions.model_name(value)
+model_name(value::PhysicsAssistant)::String = PhysicalAssistant.model_name(value)
 
 base_url(value::ModelSession)::String = ModelSessions.base_url(value)
-base_url(value::PhysicsAssistant)::String =
-    PhysicalAssistant.base_url(value)
+base_url(value::PhysicsAssistant)::String = PhysicalAssistant.base_url(value)
 
-session_directory(value::ModelSession) =
-    ModelSessions.session_directory(value)
-session_directory(value::PhysicsAssistant) =
-    PhysicalAssistant.session_directory(value)
+session_directory(value::ModelSession) = ModelSessions.session_directory(value)
+session_directory(value::PhysicsAssistant) = PhysicalAssistant.session_directory(value)
 
-system_prompt(value::ModelSession)::String =
-    ModelSessions.system_prompt(value)
-system_prompt(value::PhysicsAssistant)::String =
-    PhysicalAssistant.system_prompt(value)
+system_prompt(value::ModelSession)::String = ModelSessions.system_prompt(value)
+system_prompt(value::PhysicsAssistant)::String = PhysicalAssistant.system_prompt(value)
 
-default_temperature(value::ModelSession)::Float64 =
-    ModelSessions.default_temperature(value)
-default_temperature(value::PhysicsAssistant)::Float64 =
-    PhysicalAssistant.default_temperature(value)
+default_temperature(value::ModelSession)::Float64 = ModelSessions.default_temperature(value)
+default_temperature(value::PhysicsAssistant)::Float64 = PhysicalAssistant.default_temperature(value)
 
-default_thinking(value::ModelSession) =
-    ModelSessions.default_thinking(value)
-default_thinking(value::PhysicsAssistant) =
-    PhysicalAssistant.default_thinking(value)
+default_thinking(value::ModelSession) = ModelSessions.default_thinking(value)
+default_thinking(value::PhysicsAssistant) = PhysicalAssistant.default_thinking(value)
 
-default_keep_alive(value::ModelSession) =
-    ModelSessions.default_keep_alive(value)
-default_keep_alive(value::PhysicsAssistant) =
-    PhysicalAssistant.default_keep_alive(value)
+default_keep_alive(value::ModelSession) = ModelSessions.default_keep_alive(value)
+default_keep_alive(value::PhysicsAssistant) = PhysicalAssistant.default_keep_alive(value)
 
-default_tool_mode(value::ModelSession) =
-    ModelSessions.default_tool_mode(value)
-default_tool_mode(value::PhysicsAssistant) =
-    PhysicalAssistant.default_tool_mode(value)
+default_tool_mode(value::ModelSession) = ModelSessions.default_tool_mode(value)
+default_tool_mode(value::PhysicsAssistant) = PhysicalAssistant.default_tool_mode(value)
 
-last_response(value::ModelSession) =
-    ModelSessions.last_response(value)
-last_response(value::PhysicsAssistant) =
-    PhysicalAssistant.last_response(value)
+last_response(value::ModelSession) = ModelSessions.last_response(value)
+last_response(value::PhysicsAssistant) = PhysicalAssistant.last_response(value)
 
-last_response_metrics(value::ModelSession) =
-    ModelSessions.last_response_metrics(value)
-last_response_metrics(value::PhysicsAssistant) =
-    PhysicalAssistant.last_response_metrics(value)
+last_response_metrics(value::ModelSession) = ModelSessions.last_response_metrics(value)
+last_response_metrics(value::PhysicsAssistant) = PhysicalAssistant.last_response_metrics(value)
 
-set_temperature!(value::ModelSession, temperature)::ModelSession =
-    ModelSessions.set_temperature!(value, temperature)
-set_temperature!(value::PhysicsAssistant, temperature)::PhysicsAssistant =
-    PhysicalAssistant.set_temperature!(value, temperature)
+set_temperature!(value::ModelSession, temperature)::ModelSession = ModelSessions.set_temperature!(value, temperature)
+set_temperature!(value::PhysicsAssistant, temperature)::PhysicsAssistant = PhysicalAssistant.set_temperature!(value, temperature)
 
-set_thinking!(value::ModelSession, thinking)::ModelSession =
-    ModelSessions.set_thinking!(value, thinking)
-set_thinking!(value::PhysicsAssistant, thinking)::PhysicsAssistant =
-    PhysicalAssistant.set_thinking!(value, thinking)
+set_thinking!(value::ModelSession, thinking)::ModelSession = ModelSessions.set_thinking!(value, thinking)
+set_thinking!(value::PhysicsAssistant, thinking)::PhysicsAssistant = PhysicalAssistant.set_thinking!(value, thinking)
 
-set_reasoning_visible!(
-    value::ModelSession,
-    visible::Bool,
-)::ModelSession = ModelSessions.set_reasoning_visible!(value, visible)
+set_reasoning_visible!(value::ModelSession, visible::Bool)::ModelSession = ModelSessions.set_reasoning_visible!(value, visible)
 
-set_reasoning_visible!(
-    value::PhysicsAssistant,
-    visible::Bool,
-)::PhysicsAssistant = PhysicalAssistant.set_reasoning_visible!(
-    value,
-    visible,
-)
+set_reasoning_visible!(value::PhysicsAssistant, visible::Bool)::PhysicsAssistant = PhysicalAssistant.set_reasoning_visible!(value, visible)
 
-set_keep_alive!(value::ModelSession, policy)::ModelSession =
-    ModelSessions.set_keep_alive!(value, policy)
-set_keep_alive!(value::PhysicsAssistant, policy)::PhysicsAssistant =
-    PhysicalAssistant.set_keep_alive!(value, policy)
+set_keep_alive!(value::ModelSession, policy)::ModelSession = ModelSessions.set_keep_alive!(value, policy)
+set_keep_alive!(value::PhysicsAssistant, policy)::PhysicsAssistant = PhysicalAssistant.set_keep_alive!(value, policy)
 
-set_timeouts!(value::ModelSession; kwargs...)::ModelSession =
-    ModelSessions.set_timeouts!(value; kwargs...)
-set_timeouts!(value::PhysicsAssistant; kwargs...)::PhysicsAssistant =
-    PhysicalAssistant.set_timeouts!(value; kwargs...)
+set_timeouts!(value::ModelSession; kwargs...)::ModelSession = ModelSessions.set_timeouts!(value; kwargs...)
+set_timeouts!(value::PhysicsAssistant; kwargs...)::PhysicsAssistant = PhysicalAssistant.set_timeouts!(value; kwargs...)
 
-set_tool_mode!(
-    value::ModelSession,
-    mode::JupyTools.ToolMode,
-)::ModelSession = ModelSessions.set_tool_mode!(value, mode)
+set_tool_mode!(value::ModelSession, mode::JupyTools.ToolMode)::ModelSession = ModelSessions.set_tool_mode!(value, mode)
 
-set_tool_mode!(
-    value::PhysicsAssistant,
-    mode::JupyTools.ToolMode,
-)::PhysicsAssistant = PhysicalAssistant.set_tool_mode!(value, mode)
+set_tool_mode!(value::PhysicsAssistant, mode::JupyTools.ToolMode)::PhysicsAssistant = PhysicalAssistant.set_tool_mode!(value, mode)
 
-set_tool_context!(
-    value::ModelSession,
-    context::JupyTools.ToolContext,
-)::ModelSession = ModelSessions.set_tool_context!(value, context)
+set_tool_context!(value::ModelSession, context::JupyTools.ToolContext)::ModelSession = ModelSessions.set_tool_context!(value, context)
 
-set_tool_context!(
-    value::PhysicsAssistant,
-    context::JupyTools.ToolContext,
-)::PhysicsAssistant = PhysicalAssistant.set_tool_context!(value, context)
+set_tool_context!(value::PhysicsAssistant, context::JupyTools.ToolContext)::PhysicsAssistant = PhysicalAssistant.set_tool_context!(value, context)
 
-set_image_backend!(
-    value::ModelSession,
-    backend::AbstractImageBackend,
-)::ModelSession = ModelSessions.set_image_backend!(value, backend)
+set_image_backend!(value::ModelSession, backend::AbstractImageBackend)::ModelSession = ModelSessions.set_image_backend!(value, backend)
 
-set_image_backend!(
-    value::PhysicsAssistant,
-    backend::AbstractImageBackend,
-)::PhysicsAssistant = PhysicalAssistant.set_image_backend!(value, backend)
+set_image_backend!(value::PhysicsAssistant, backend::AbstractImageBackend)::PhysicsAssistant = PhysicalAssistant.set_image_backend!(value, backend)
 
-default_image_backend(value::ModelSession) =
-    ModelSessions.default_image_backend(value)
-default_image_backend(value::PhysicsAssistant) =
-    PhysicalAssistant.default_image_backend(value)
+default_image_backend(value::ModelSession) = ModelSessions.default_image_backend(value)
+default_image_backend(value::PhysicsAssistant) = PhysicalAssistant.default_image_backend(value)
 
-set_mode!(value::PhysicsAssistant, mode::AssistantMode)::PhysicsAssistant =
-    PhysicalAssistant.set_mode!(value, mode)
+set_mode!(value::PhysicsAssistant, mode::AssistantMode)::PhysicsAssistant = PhysicalAssistant.set_mode!(value, mode)
 
-default_mode(value::PhysicsAssistant)::AssistantMode =
-    PhysicalAssistant.default_mode(value)
+default_mode(value::PhysicsAssistant)::AssistantMode = PhysicalAssistant.default_mode(value)
 
-attach!(value::ModelSession, path::AbstractString) =
-    ModelSessions.attach!(value, path)
-attach!(value::PhysicsAssistant, path::AbstractString) =
-    PhysicalAssistant.attach!(value, path)
+attach!(value::ModelSession, path::AbstractString) = ModelSessions.attach!(value, path)
+attach!(value::PhysicsAssistant, path::AbstractString) = PhysicalAssistant.attach!(value, path)
 
-clear_attachments!(value::ModelSession)::Nothing =
-    ModelSessions.clear_attachments!(value)
-clear_attachments!(value::PhysicsAssistant)::Nothing =
-    PhysicalAssistant.clear_attachments!(value)
+clear_attachments!(value::ModelSession)::Nothing = ModelSessions.clear_attachments!(value)
+clear_attachments!(value::PhysicsAssistant)::Nothing = PhysicalAssistant.clear_attachments!(value)
 
-pending_attachments(value::ModelSession) =
-    ModelSessions.pending_attachments(value)
-pending_attachments(value::PhysicsAssistant) =
-    PhysicalAssistant.pending_attachments(value)
+pending_attachments(value::ModelSession) = ModelSessions.pending_attachments(value)
+pending_attachments(value::PhysicsAssistant) = PhysicalAssistant.pending_attachments(value)
 
 artifact_store(value::ModelSession) = ModelSessions.artifact_store(value)
-artifact_store(value::PhysicsAssistant) =
-    PhysicalAssistant.artifact_store(value)
+artifact_store(value::PhysicsAssistant) = PhysicalAssistant.artifact_store(value)
 
 sandbox_config(value::ModelSession) = ModelSessions.sandbox_config(value)
-sandbox_config(value::PhysicsAssistant) =
-    PhysicalAssistant.sandbox_config(value)
+sandbox_config(value::PhysicsAssistant) = PhysicalAssistant.sandbox_config(value)
 
-model_capabilities(value::ModelSession) =
-    ModelSessions.model_capabilities(value)
-model_capabilities(value::PhysicsAssistant) =
-    PhysicalAssistant.model_capabilities(value)
-model_capabilities(model::AbstractString; kwargs...) =
-    CapabilityDiscovery.model_capabilities(model; kwargs...)
-show_model_details(model::AbstractString; kwargs...) =
-    CapabilityDiscovery.show_model_details(model; kwargs...)
-supports(capabilities::ModelCapabilities, capability::Symbol)::Bool =
-    CapabilityDiscovery.supports(capabilities, capability)
-require_capability(
-    capabilities::ModelCapabilities,
-    capability::Symbol,
-)::Nothing = CapabilityDiscovery.require_capability(
-    capabilities,
-    capability,
-)
-capability_names(capabilities::ModelCapabilities)::Vector{String} =
-    CapabilityDiscovery.capability_names(capabilities)
+model_capabilities(value::ModelSession) = ModelSessions.model_capabilities(value)
+model_capabilities(value::PhysicsAssistant) = PhysicalAssistant.model_capabilities(value)
+model_capabilities(model::AbstractString; kwargs...) = CapabilityDiscovery.model_capabilities(model; kwargs...)
+show_model_details(model::AbstractString; kwargs...) = CapabilityDiscovery.show_model_details(model; kwargs...)
+supports(capabilities::ModelCapabilities, capability::Symbol)::Bool = CapabilityDiscovery.supports(capabilities, capability)
+require_capability(capabilities::ModelCapabilities, capability::Symbol)::Nothing = CapabilityDiscovery.require_capability(capabilities, capability)
+capability_names(capabilities::ModelCapabilities)::Vector{String} = CapabilityDiscovery.capability_names(capabilities)
 
 # -----------------------------------------------------------------------------
 # One-shot budget configuration
@@ -431,22 +293,14 @@ function _take_budget!()::Tuple{BudgetConfig,Bool}
 end
 
 macro budget(assignments...)
-    isempty(assignments) && error(
-        "@budget requires at least one field=value assignment",
-    )
+    isempty(assignments) && error("@budget requires at least one field=value assignment")
     allowed = Set(fieldnames(BudgetConfig))
     keywords = Expr[]
     for assignment in assignments
-        assignment isa Expr || error(
-            "@budget expects field=value assignments",
-        )
-        assignment.head in (:(=), :kw) || error(
-            "@budget expects field=value assignments",
-        )
+        assignment isa Expr || error("@budget expects field=value assignments")
+        assignment.head in (:(=), :kw) || error("@budget expects field=value assignments")
         field = assignment.args[1]
-        field isa Symbol || error(
-            "@budget field names must be symbols",
-        )
+        field isa Symbol || error("@budget field names must be symbols")
         field in allowed || error("unknown BudgetConfig field '$field'")
         push!(keywords, Expr(:kw, field, esc(assignment.args[2])))
     end
@@ -485,19 +339,8 @@ function set_default_image_workflow!(
     loopback_only::Bool = true,
     resource_policy::ImageResourcePolicy = IMAGE_AUTO,
 )::ComfyBackend
-    isnothing(bindings.model) && throw(ArgumentError(
-        "default image workflow requires bindings.model",
-    ))
-    backend = ComfyBackend(
-        workflow,
-        bindings;
-        base_url,
-        poll_interval,
-        timeout,
-        request_timeout,
-        loopback_only,
-        resource_policy,
-    )
+    isnothing(bindings.model) && throw(ArgumentError("default image workflow requires bindings.model"))
+    backend = ComfyBackend(workflow, bindings; base_url, poll_interval, timeout, request_timeout, loopback_only, resource_policy)
     lock(_IMAGE_CONFIG_LOCK) do
         _DEFAULT_IMAGE_WORKFLOW[] = backend
     end
@@ -521,35 +364,37 @@ function clear_default_image_workflow!()::Nothing
     return nothing
 end
 
-_resolve_image_backend(
-    backend::AbstractImageBackend,
-)::AbstractImageBackend = backend
+_resolve_image_backend(backend::AbstractImageBackend)::AbstractImageBackend = backend
 
 _resolve_image_backend(::Nothing)::Nothing = nothing
 
 function _resolve_image_backend(model::AbstractString)::ComfyBackend
     selected = String(strip(model))
-    isempty(selected) && throw(ArgumentError(
-        "image model name must not be empty",
-    ))
-    return lock(_IMAGE_CONFIG_LOCK) do
-        backend = _DEFAULT_IMAGE_WORKFLOW[]
-        isnothing(backend) && throw(ArgumentError(
-            "no default image workflow is configured; call " *
-            "set_default_image_workflow!(workflow, bindings) first",
-        ))
-        return ComfyClient.with_model(backend, selected)
+    isempty(selected) && throw(ArgumentError("image model name must not be empty"))
+    configured = lock(_IMAGE_CONFIG_LOCK) do
+        _DEFAULT_IMAGE_WORKFLOW[]
     end
+    return isnothing(configured) ? ComfyWorkflow.checkpoint_backend(selected) : ComfyClient.with_model(configured, selected)
 end
 
-function _set_image_model!(
-    value::Union{AbstractString,AbstractImageBackend},
-)::AbstractImageBackend
+function _set_image_model!(value::Union{AbstractString,AbstractImageBackend})::AbstractImageBackend
     backend = _resolve_image_backend(value)
     lock(_IMAGE_CONFIG_LOCK) do
         _PENDING_IMAGE_BACKEND[] = backend
     end
     return backend
+end
+
+# Report a selected image backend without printing its entire workflow graph.
+function _announce_image_backend(backend::AbstractImageBackend)::Nothing
+    isinteractive() || return nothing
+    if backend isa ComfyBackend
+        selected = isnothing(backend.model) ? "custom workflow" : backend.model
+        println("Image model selected: ", selected, " (ComfyUI; next @model/@agent)")
+    else
+        println("Image backend selected: ", ImageInterface.backend_name(backend), " (next @model/@agent)")
+    end
+    return nothing
 end
 
 function _take_image_backend!()::Union{AbstractImageBackend,Nothing}
@@ -570,40 +415,31 @@ default workflow configured by `set_default_image_workflow!`. A concrete
 """
 macro imagemodel(image)
     setter = GlobalRef(@__MODULE__, :_set_image_model!)
-    return :($setter($(esc(image))))
+    announce = GlobalRef(@__MODULE__, :_announce_image_backend)
+    return quote
+        local selected = $setter($(esc(image)))
+        $announce(selected)
+        nothing
+    end
 end
-
-function _parse_session_image_args(
-    macro_name::String,
-    args::Tuple,
-)::Tuple{Any,Any,Bool}
+function _parse_session_image_args(macro_name::String, args::Tuple)::Tuple{Any,Any,Bool}
     positional = Any[]
     image_expr = nothing
     has_image = false
     for argument in args
         if argument isa Expr && argument.head in (:(=), :kw)
-            length(argument.args) == 2 || error(
-                "$macro_name received an invalid keyword assignment",
-            )
+            length(argument.args) == 2 || error("$macro_name received an invalid keyword assignment")
             name = argument.args[1]
-            name isa Symbol || error(
-                "$macro_name keyword names must be symbols",
-            )
-            name == :image || error(
-                "$macro_name supports only the image= keyword",
-            )
-            has_image && error(
-                "$macro_name image= may be specified only once",
-            )
+            name isa Symbol || error("$macro_name keyword names must be symbols")
+            name == :image || error("$macro_name supports only the image= keyword")
+            has_image && error("$macro_name image= may be specified only once")
             image_expr = argument.args[2]
             has_image = true
         else
             push!(positional, argument)
         end
     end
-    length(positional) <= 1 || error(
-        "$macro_name accepts at most one session_dir positional argument",
-    )
+    length(positional) <= 1 || error("$macro_name accepts at most one session_dir positional argument")
     session_dir = isempty(positional) ? :(nothing) : positional[1]
     return session_dir, image_expr, has_image
 end
@@ -612,85 +448,49 @@ end
 # Construction and resume
 # -----------------------------------------------------------------------------
 
-function _build_agent(
-    ::Val{:physics},
-    model_name::AbstractString,
-    cfg::BudgetConfig,
-    session_dir::Union{AbstractString,Nothing};
-    image_backend::Union{AbstractImageBackend,Nothing} = nothing,
-)::PhysicsAssistant
-    return PhysicsAssistant(
-        model_name;
-        cfg,
-        session_dir,
-        image_backend,
-    )
+function _build_agent(::Val{:physics}, model_name::AbstractString, cfg::BudgetConfig, session_dir::Union{AbstractString,Nothing}; image_backend::Union{AbstractImageBackend,Nothing} = nothing)::PhysicsAssistant
+    isnothing(image_backend) || ComfyLifecycle.ensure_backend!(image_backend)
+    return PhysicsAssistant(model_name; cfg, session_dir, image_backend)
 end
 
-function _build_agent(
-    ::Val{profile},
-    ::AbstractString,
-    ::BudgetConfig,
-    ::Union{AbstractString,Nothing};
-    image_backend::Union{AbstractImageBackend,Nothing} = nothing,
-) where {profile}
-    throw(ArgumentError(
-        "unknown agent profile :$profile; available profiles: :physics",
-    ))
+function _build_agent(::Val{profile}, ::AbstractString, ::BudgetConfig, ::Union{AbstractString,Nothing}; image_backend::Union{AbstractImageBackend,Nothing} = nothing) where {profile}
+    throw(ArgumentError("unknown agent profile :$profile; available profiles: :physics"))
 end
 
-function _build_model_session(
-    model_name::AbstractString,
-    cfg::BudgetConfig,
-    session_dir::Union{AbstractString,Nothing};
-    image_backend::Union{AbstractImageBackend,Nothing} = nothing,
-)::ModelSession
-    return ModelSession(
-        model_name;
-        cfg,
-        session_dir,
-        image_backend,
-    )
+function _build_model_session(model_name::AbstractString, cfg::BudgetConfig, session_dir::Union{AbstractString,Nothing}; image_backend::Union{AbstractImageBackend,Nothing} = nothing)::ModelSession
+    isnothing(image_backend) || ComfyLifecycle.ensure_backend!(image_backend)
+    return ModelSession(model_name; cfg, session_dir, image_backend)
 end
 
-function _session_metadata(
-    session_dir::AbstractString,
-)::NamedTuple{(:session_type, :prompt),Tuple{String,String}}
+function _session_metadata(session_dir::AbstractString)::NamedTuple{(:session_type, :prompt),Tuple{String,String}}
     path = joinpath(String(session_dir), "hot.json")
     isfile(path) || error("No hot store found at $path")
     data = JSON3.read(read(path, String))
-    return (
-        session_type = String(get(data, "session_type", "generic")),
-        prompt = String(get(data, "prompt", "")),
-    )
+    return (session_type = String(get(data, "session_type", "generic")), prompt = String(get(data, "prompt", "")),)
 end
 
 function _resume_session(
     model_name::AbstractString,
     session_dir::AbstractString;
     cfg::Union{BudgetConfig,Nothing} = nothing,
+    image_backend::Union{AbstractImageBackend,Nothing} = nothing,
 )
+    isnothing(image_backend) || ComfyLifecycle.ensure_backend!(image_backend)
     metadata = _session_metadata(session_dir)
     kind = metadata.session_type
-    legacy_physics = kind == _GENERIC_SESSION_TYPE &&
-        PhysicalAssistant._same_physics_prompt(metadata.prompt)
+    legacy_physics = kind == _GENERIC_SESSION_TYPE && PhysicalAssistant._same_physics_prompt(metadata.prompt)
     if kind == _PHYSICS_SESSION_TYPE || legacy_physics
-        return load_assistant(model_name, session_dir; cfg)
+        return load_assistant(model_name, session_dir; cfg, image_backend)
     elseif kind in (_MODEL_SESSION_TYPE, _GENERIC_SESSION_TYPE)
-        session = load_model_session(model_name, session_dir; cfg)
+        session = load_model_session(model_name, session_dir; cfg, image_backend)
         session.session.session_type = _MODEL_SESSION_TYPE
         return session
     end
-    throw(ArgumentError(
-        "unsupported persisted session type '$kind' at $session_dir",
-    ))
+    throw(ArgumentError("unsupported persisted session type '$kind' at $session_dir"))
 end
 
 macro model(model_name, args...)
-    session_dir, image_expr, has_image = _parse_session_image_args(
-        "@model",
-        args,
-    )
+    session_dir, image_expr, has_image = _parse_session_image_args("@model", args)
     take_budget = GlobalRef(@__MODULE__, :_take_budget!)
     take_image = GlobalRef(@__MODULE__, :_take_image_backend!)
     resolve_image = GlobalRef(@__MODULE__, :_resolve_image_backend)
@@ -724,10 +524,7 @@ macro model(model_name, args...)
 end
 
 macro agent(profile, model_name, args...)
-    session_dir, image_expr, has_image = _parse_session_image_args(
-        "@agent",
-        args,
-    )
+    session_dir, image_expr, has_image = _parse_session_image_args("@agent", args)
     take_budget = GlobalRef(@__MODULE__, :_take_budget!)
     take_image = GlobalRef(@__MODULE__, :_take_image_backend!)
     resolve_image = GlobalRef(@__MODULE__, :_resolve_image_backend)
@@ -762,16 +559,34 @@ macro agent(profile, model_name, args...)
     end
 end
 
-macro resume(model_name, session_dir)
+macro resume(model_name, session_dir, args...)
+    length(args) <= 1 || error("@resume accepts at most one image= assignment")
+    image_expr = nothing
+    if !isempty(args)
+        assignment = args[1]
+        assignment isa Expr && assignment.head in (:(=), :kw) && length(assignment.args) == 2 && assignment.args[1] == :image || error("@resume supports only image= as an optional keyword")
+        image_expr = assignment.args[2]
+    end
     take_budget = GlobalRef(@__MODULE__, :_take_budget!)
+    take_image = GlobalRef(@__MODULE__, :_take_image_backend!)
+    resolve_image = GlobalRef(@__MODULE__, :_resolve_image_backend)
     resume_session = GlobalRef(@__MODULE__, :_resume_session)
     run_repl = GlobalRef(@__MODULE__, :repl)
+    if isnothing(image_expr)
+        return quote
+            local _cfg, _explicit = $take_budget()
+            local _session = $resume_session($(esc(model_name)), $(esc(session_dir)); cfg = _explicit ? _cfg : nothing)
+            $run_repl(_session)
+        end
+    end
     return quote
         local _cfg, _explicit = $take_budget()
+        local _image_backend = $resolve_image($(esc(image_expr)))
+        $take_image()
         local _session = $resume_session(
-            $(esc(model_name)),
-            $(esc(session_dir));
+            $(esc(model_name)), $(esc(session_dir));
             cfg = _explicit ? _cfg : nothing,
+            image_backend = _image_backend,
         )
         $run_repl(_session)
     end
@@ -833,6 +648,7 @@ function welcome(
 end
 
 function __init__()::Nothing
+    ComfyLifecycle.start_on_import!()
     _banner_enabled() && welcome()
     return nothing
 end

@@ -5,6 +5,7 @@ import ..CapabilityDiscovery
 import ..ImageInterface
 import ..JupyTools
 import ..OllamaClient
+import ..ComfyLifecycle
 import ..ProtocolTypes
 import ..Sandboxing
 
@@ -43,6 +44,7 @@ mutable struct ModelSession
     image_backend::ImageInterface.AbstractImageBackend
     attachments::Vector{ArtifactRef}
     stop_model_on_close::Bool
+    ollama_unloaded_for_image::Bool
     lock::ReentrantLock
     closed::Bool
 end
@@ -51,9 +53,7 @@ function _temperature(value::Real)::Float64
     converted = Float64(value)
     isfinite(converted) ||
         throw(ArgumentError("temperature must be finite"))
-    converted >= 0.0 || throw(ArgumentError(
-        "temperature must be nonnegative",
-    ))
+    converted >= 0.0 || throw(ArgumentError("temperature must be nonnegative"))
     return converted
 end
 
@@ -65,30 +65,22 @@ end
 
 function _positive_float(value::Real, name::String)::Float64
     converted = Float64(value)
-    isfinite(converted) && converted > 0.0 || throw(ArgumentError(
-        "$name must be positive and finite",
-    ))
+    isfinite(converted) && converted > 0.0 || throw(ArgumentError("$name must be positive and finite"))
     return converted
 end
 
 function _nonnegative_timeout(value::Real, name::String)::Float64
     converted = Float64(value)
-    isfinite(converted) && converted >= 0.0 || throw(ArgumentError(
-        "$name must be nonnegative and finite",
-    ))
+    isfinite(converted) && converted >= 0.0 || throw(ArgumentError("$name must be nonnegative and finite"))
     return converted
 end
 
 function _keep_alive(value)::Union{Nothing,Int,String}
     isnothing(value) && return nothing
     value isa Integer && return Int(value)
-    value isa AbstractString || throw(ArgumentError(
-        "keep_alive must be nothing, an integer, or a duration string",
-    ))
+    value isa AbstractString || throw(ArgumentError("keep_alive must be nothing, an integer, or a duration string"))
     normalized = String(strip(value))
-    isempty(normalized) && throw(ArgumentError(
-        "keep_alive string must not be empty",
-    ))
+    isempty(normalized) && throw(ArgumentError("keep_alive string must not be empty"))
     return normalized
 end
 
@@ -97,21 +89,14 @@ function _require_open(ms::ModelSession)::Nothing
     return nothing
 end
 
-function _session_dir(
-    value::Union{AbstractString,Nothing},
-)::Union{String,Nothing}
+function _session_dir(value::Union{AbstractString,Nothing})::Union{String,Nothing}
     isnothing(value) && return nothing
     directory = String(value)
-    isempty(strip(directory)) && throw(ArgumentError(
-        "session_dir must not be empty",
-    ))
+    isempty(strip(directory)) && throw(ArgumentError("session_dir must not be empty"))
     return directory
 end
 
-function _artifact_store(
-    directory::Union{String,Nothing},
-    artifact_dir::Union{AbstractString,Nothing},
-)::ArtifactStore.Store
+function _artifact_store(directory::Union{String,Nothing}, artifact_dir::Union{AbstractString,Nothing})::ArtifactStore.Store
     root = if !isnothing(artifact_dir)
         String(artifact_dir)
     elseif !isnothing(directory)
@@ -139,41 +124,20 @@ function _sandbox_config(
     else
         mktempdir(prefix = "phluxai-sandbox-")
     end
-    return Sandboxing.SandboxConfig(
-        root;
-        backend,
-        network,
-        timeout_seconds,
-        allow_unsafe_local,
-        readonly_paths,
-        environment,
-    )
+    return Sandboxing.SandboxConfig(root; backend, network, timeout_seconds, allow_unsafe_local, readonly_paths, environment)
 end
 
-function _discover_capabilities(
-    model::OllamaClient.OllamaModel,
-    enabled::Bool,
-)::Union{CapabilityDiscovery.ModelCapabilities,Nothing}
+function _discover_capabilities(model::OllamaClient.OllamaModel, enabled::Bool)::Union{CapabilityDiscovery.ModelCapabilities,Nothing}
     enabled || return nothing
     try
-        return CapabilityDiscovery.model_capabilities(
-            model.name;
-            base_url = model.base_url,
-            request_timeout = 10.0,
-        )
+        return CapabilityDiscovery.model_capabilities(model.name; base_url = model.base_url, request_timeout = 10.0)
     catch error
-        @debug "Model capability discovery failed" exception = (
-            error,
-            catch_backtrace(),
-        )
+        @debug "Model capability discovery failed" exception = (error, catch_backtrace(),)
         return nothing
     end
 end
 
-function _stop_policy(
-    stop_model_on_close::Union{Bool,Nothing},
-    start_model::Bool,
-)::Bool
+function _stop_policy(stop_model_on_close::Union{Bool,Nothing}, start_model::Bool)::Bool
     return isnothing(stop_model_on_close) ? start_model : stop_model_on_close
 end
 
@@ -186,21 +150,13 @@ function ModelSession(
     request_timeout::Real = 0.0,
     read_idle_timeout::Real = 0.0,
     tool_mode::JupyTools.ToolMode = JupyTools.TOOLS_OFF,
-    sandbox::Sandboxing.SandboxConfig = Sandboxing.SandboxConfig(
-        mktempdir(prefix = "phluxai-sandbox-"),
-    ),
-    capabilities::Union{
-        CapabilityDiscovery.ModelCapabilities,
-        Nothing,
-    } = nothing,
-    image_backend::Union{
-        ImageInterface.AbstractImageBackend,
-        Nothing,
-    } = nothing,
+    sandbox::Sandboxing.SandboxConfig = Sandboxing.SandboxConfig(mktempdir(prefix = "phluxai-sandbox-")),
+    capabilities::Union{CapabilityDiscovery.ModelCapabilities, Nothing} = nothing,
+    image_backend::Union{ImageInterface.AbstractImageBackend, Nothing} = nothing,
     stop_model_on_close::Bool = false,
+    ollama_unloaded_for_image::Bool = false
 )::ModelSession
-    selected_image_backend = isnothing(image_backend) ?
-        OllamaClient.OllamaImageBackend(session.model) : image_backend
+    selected_image_backend = isnothing(image_backend) ? OllamaClient.OllamaImageBackend(session.model) : image_backend
     model_session = ModelSession(
         session,
         _temperature(temperature),
@@ -216,6 +172,7 @@ function ModelSession(
         selected_image_backend,
         ArtifactRef[],
         stop_model_on_close,
+        false,
         ReentrantLock(),
         false,
     )
@@ -225,10 +182,7 @@ end
 
 function ModelSession(
     model_name::AbstractString;
-    cfg::OllamaClient.BudgetConfig = OllamaClient.BudgetConfig(
-        num_ctx = 16384,
-        num_thread = 8,
-    ),
+    cfg::OllamaClient.BudgetConfig = OllamaClient.BudgetConfig(num_ctx = 16384, num_thread = 8),
     system_prompt::AbstractString = DEFAULT_SYSTEM_PROMPT,
     session_dir::Union{AbstractString,Nothing} = nothing,
     artifact_dir::Union{AbstractString,Nothing} = nothing,
@@ -247,13 +201,9 @@ function ModelSession(
     sandbox_timeout::Real = 120.0,
     allow_unsafe_local::Bool = false,
     sandbox_readonly_paths::AbstractVector{<:AbstractString} = String[],
-    sandbox_environment::AbstractDict{<:AbstractString,<:AbstractString} =
-        Dict{String,String}(),
+    sandbox_environment::AbstractDict{<:AbstractString,<:AbstractString} = Dict{String,String}(),
     discover_capabilities::Bool = true,
-    image_backend::Union{
-        ImageInterface.AbstractImageBackend,
-        Nothing,
-    } = nothing,
+    image_backend::Union{ImageInterface.AbstractImageBackend, Nothing} = nothing,
     timeout::Integer = DEFAULT_TIMEOUT,
     poll_interval::Real = DEFAULT_POLL_INTERVAL,
     start_model::Bool = true,
@@ -279,27 +229,11 @@ function ModelSession(
     started = false
     try
         if start_model
-            OllamaClient.start_model!(
-                model.name,
-                model.base_url;
-                timeout = startup_timeout,
-                poll_interval = startup_poll,
-            )
+            OllamaClient.start_model!(model.name, model.base_url; timeout = startup_timeout, poll_interval = startup_poll)
             started = true
         end
-        chat_session = OllamaClient.ChatSession(
-            model,
-            String(system_prompt);
-            cfg,
-            session_dir = directory,
-            session_type,
-            artifact_store = store,
-            persist_reasoning,
-        )
-        capabilities = _discover_capabilities(
-            model,
-            discover_capabilities,
-        )
+        chat_session = OllamaClient.ChatSession(model, String(system_prompt); cfg, session_dir = directory, session_type, artifact_store = store, persist_reasoning)
+        capabilities = _discover_capabilities(model, discover_capabilities)
         return ModelSession(
             chat_session;
             temperature,
@@ -319,10 +253,7 @@ function ModelSession(
             try
                 OllamaClient.stop_model!(model)
             catch cleanup_error
-                @warn "Model cleanup failed" exception = (
-                    cleanup_error,
-                    catch_backtrace(),
-                )
+                @warn "Model cleanup failed" exception = (cleanup_error, catch_backtrace(),)
             end
         end
         rethrow()
@@ -348,13 +279,9 @@ function load_model_session(
     sandbox_timeout::Real = 120.0,
     allow_unsafe_local::Bool = false,
     sandbox_readonly_paths::AbstractVector{<:AbstractString} = String[],
-    sandbox_environment::AbstractDict{<:AbstractString,<:AbstractString} =
-        Dict{String,String}(),
+    sandbox_environment::AbstractDict{<:AbstractString,<:AbstractString} = Dict{String,String}(),
     discover_capabilities::Bool = true,
-    image_backend::Union{
-        ImageInterface.AbstractImageBackend,
-        Nothing,
-    } = nothing,
+    image_backend::Union{ImageInterface.AbstractImageBackend, Nothing} = nothing,
     timeout::Integer = DEFAULT_TIMEOUT,
     poll_interval::Real = DEFAULT_POLL_INTERVAL,
     start_model::Bool = true,
@@ -363,41 +290,18 @@ function load_model_session(
     directory = _session_dir(session_dir)::String
     model = OllamaClient.OllamaModel(model_name, base_url)
     store = _artifact_store(directory, artifact_dir)
-    sandbox = _sandbox_config(
-        directory,
-        sandbox_dir;
-        backend = sandbox_backend,
-        network = sandbox_network,
-        timeout_seconds = sandbox_timeout,
-        allow_unsafe_local,
-        readonly_paths = sandbox_readonly_paths,
-        environment = sandbox_environment,
-    )
+    sandbox = _sandbox_config(directory, sandbox_dir; backend = sandbox_backend, network = sandbox_network, 
+                              timeout_seconds = sandbox_timeout, allow_unsafe_local, readonly_paths = sandbox_readonly_paths, environment = sandbox_environment)
     stop_on_close = _stop_policy(stop_model_on_close, start_model)
     started = false
     try
         if start_model
-            OllamaClient.start_model!(
-                model.name,
-                model.base_url;
-                timeout = _positive_int(timeout, "timeout"),
-                poll_interval = _positive_float(
-                    poll_interval,
-                    "poll_interval",
-                ),
-            )
+            OllamaClient.start_model!(model.name, model.base_url; timeout = _positive_int(timeout, "timeout"), poll_interval = _positive_float(poll_interval,"poll_interval"))
             started = true
         end
-        session = OllamaClient.load_session(
-            model,
-            directory;
-            artifact_store = store,
-        )
+        session = OllamaClient.load_session(model, directory; artifact_store = store)
         isnothing(cfg) || (session.cfg = cfg)
-        capabilities = _discover_capabilities(
-            model,
-            discover_capabilities,
-        )
+        capabilities = _discover_capabilities(model, discover_capabilities)
         return ModelSession(
             session;
             temperature,
@@ -425,18 +329,12 @@ end
 
 function _ensure_tool_context!(ms::ModelSession)::JupyTools.ToolContext
     if isnothing(ms.tool_context)
-        ms.tool_context = JupyTools.ToolContext(
-            ms.sandbox,
-            ms.session.artifact_store,
-        )
+        ms.tool_context = JupyTools.ToolContext(ms.sandbox, ms.session.artifact_store)
     end
     return ms.tool_context
 end
 
-function _approval_callback(
-    call::ProtocolTypes.ToolCall,
-    risk::JupyTools.ToolRisk,
-)::Bool
+function _approval_callback(call::ProtocolTypes.ToolCall, risk::JupyTools.ToolRisk)::Bool
     println()
     println("Tool request: ", call.name)
     println("Risk: ", risk)
@@ -473,79 +371,41 @@ function respond!(
     selected_tokens = _positive_int(max_tokens, "max_tokens")
     selected_thinking = normalize_thinking(thinking)
     selected_keep_alive = _keep_alive(keep_alive)
-    selected_request_timeout = _nonnegative_timeout(
-        request_timeout,
-        "request_timeout",
-    )
-    selected_read_idle_timeout = _nonnegative_timeout(
-        read_idle_timeout,
-        "read_idle_timeout",
-    )
+    selected_request_timeout = _nonnegative_timeout(request_timeout, "request_timeout")
+    selected_read_idle_timeout = _nonnegative_timeout(read_idle_timeout, "read_idle_timeout")
     steps = _positive_int(max_tool_steps, "max_tool_steps")
 
     return lock(ms.lock) do
         _require_open(ms)
+        _restore_ollama_after_image!(ms)
         registry_specs = ProtocolTypes.ToolSpec[]
         context = nothing
         if tool_mode != JupyTools.TOOLS_OFF
             context = _ensure_tool_context!(ms)
             registry_specs = JupyTools.tool_specs(context.registry)
         end
-        response = OllamaClient.respond!(
-            ms.session,
-            model_input;
-            temperature = selected_temperature,
-            max_tokens = selected_tokens,
-            keep_alive = selected_keep_alive,
-            thinking = selected_thinking,
-            tools = registry_specs,
-            request_timeout = selected_request_timeout,
-            read_idle_timeout = selected_read_idle_timeout,
-            stream,
-            print_tokens,
-            print_reasoning = show_reasoning,
-            io,
-            finalize = false,
-        )
+        response = OllamaClient.respond!(ms.session, model_input; temperature = selected_temperature, max_tokens = selected_tokens, 
+                                         keep_alive = selected_keep_alive, thinking = selected_thinking, tools = registry_specs, 
+                                         request_timeout = selected_request_timeout, read_idle_timeout = selected_read_idle_timeout,
+                                         stream, print_tokens, print_reasoning = show_reasoning, io, finalize = false)
         executions = ToolExecution[]
         tool_step = 0
         while has_tool_calls(response)
             tool_step += 1
             tool_step <= steps || begin
                 OllamaClient.finalize_interaction!(ms.session)
-                throw(ErrorException(
-                    "tool loop exceeded max_tool_steps=$steps",
-                ))
+                throw(ErrorException("tool loop exceeded max_tool_steps=$steps"))
             end
             context === nothing && break
             for call in response.tool_calls
-                execution = JupyTools.execute_tool_call(
-                    context,
-                    call;
-                    mode = tool_mode,
-                    approval_callback,
-                )
+                execution = JupyTools.execute_tool_call(context, call; mode = tool_mode, approval_callback)
                 push!(executions, execution)
-                OllamaClient.append_tool_execution!(
-                    ms.session,
-                    execution,
-                )
+                OllamaClient.append_tool_execution!(ms.session, execution)
             end
-            response = OllamaClient.continue_response!(
-                ms.session;
-                temperature = selected_temperature,
-                max_tokens = selected_tokens,
-                keep_alive = selected_keep_alive,
-                thinking = selected_thinking,
-                tools = registry_specs,
-                request_timeout = selected_request_timeout,
-                read_idle_timeout = selected_read_idle_timeout,
-                stream,
-                print_tokens,
-                print_reasoning = show_reasoning,
-                io,
-                finalize = false,
-            )
+            response = OllamaClient.continue_response!(ms.session; temperature = selected_temperature, max_tokens = selected_tokens,
+                                                       keep_alive = selected_keep_alive, thinking = selected_thinking, tools = registry_specs,
+                                                       request_timeout = selected_request_timeout, read_idle_timeout = selected_read_idle_timeout,
+                                                       stream, print_tokens, print_reasoning = show_reasoning, io, finalize = false)
         end
         OllamaClient.finalize_interaction!(ms.session)
         combined = with_tool_executions(response, executions)
@@ -556,49 +416,56 @@ function respond!(
     end
 end
 
-function ask!(
-    ms::ModelSession,
-    input::AbstractString;
-    kwargs...,
-)::String
+function ask!(ms::ModelSession, input::AbstractString; kwargs...)::String
     return respond!(ms, input; kwargs...).text
 end
 
-function _image_dimensions(
-    size::AbstractString,
-)::Tuple{Int,Int}
+function _image_dimensions(size::AbstractString)::Tuple{Int,Int}
     normalized = lowercase(strip(String(size)))
     match_value = match(r"^([1-9][0-9]*)x([1-9][0-9]*)$", normalized)
-    isnothing(match_value) && throw(ArgumentError(
-        "image size must use WIDTHxHEIGHT notation",
-    ))
+    isnothing(match_value) && throw(ArgumentError("image size must use WIDTHxHEIGHT notation"))
     return parse(Int, match_value.captures[1]),
            parse(Int, match_value.captures[2])
 end
 
-function _select_image_backend(
-    ms::ModelSession,
-    override::Union{ImageInterface.AbstractImageBackend,Nothing},
-)::ImageInterface.AbstractImageBackend
+function _select_image_backend(ms::ModelSession, override::Union{ImageInterface.AbstractImageBackend,Nothing})::ImageInterface.AbstractImageBackend
     return isnothing(override) ? ms.image_backend : override
 end
 
-function _prepare_image_generation!(
-    ms::ModelSession,
-    backend::ImageInterface.AbstractImageBackend,
-    unload_ollama::Union{Bool,Nothing},
-)::Nothing
-    local_ollama = OllamaClient.is_loopback_url(
-        ms.session.model.base_url,
-    )
-    should_unload = isnothing(unload_ollama) ?
-        ImageInterface.should_unload_ollama(backend, local_ollama) :
-        unload_ollama
+# Unload the text model for image inference without a routine Info announcement.
+function _quiet_stop_model_for_image!(model::OllamaClient.OllamaModel; request_timeout::Real = 10.0)::Nothing
+    OllamaClient.stop_model!(model; request_timeout, announce = false)
+    return nothing
+end
+
+# Restore the text model for interactive conversation without routine Info output.
+function _quiet_start_model_after_image!(name::AbstractString, url::AbstractString)::Nothing
+    OllamaClient.start_model!(name, url; announce = false)
+    return nothing
+end
+
+# Offload once per image-only interval; keep the marker unchanged on failure.
+function _offload_ollama_for_image!(ms::ModelSession; stop_model::Function = _quiet_stop_model_for_image!)::Nothing
+    ms.ollama_unloaded_for_image && return nothing
+    stop_model(ms.session.model; request_timeout = 10.0)
+    ms.ollama_unloaded_for_image = true
+    return nothing
+end
+
+# Reload after image offload before the next user-facing text turn.
+function _restore_ollama_after_image!(ms::ModelSession; start_model::Function = _quiet_start_model_after_image!)::Nothing
+    ms.ollama_unloaded_for_image || return nothing
+    start_model(ms.session.model.name, ms.session.model.base_url)
+    ms.ollama_unloaded_for_image = false
+    return nothing
+end
+
+function _prepare_image_generation!(ms::ModelSession, backend::ImageInterface.AbstractImageBackend, unload_ollama::Union{Bool,Nothing})::Nothing
+    ComfyLifecycle.ensure_backend!(backend)
+    local_ollama = OllamaClient.is_loopback_url(ms.session.model.base_url)
+    should_unload = isnothing(unload_ollama) ? ImageInterface.should_unload_ollama(backend, local_ollama) : unload_ollama
     should_unload || return nothing
-    OllamaClient.stop_model!(
-        ms.session.model;
-        request_timeout = 10.0,
-    )
+    _offload_ollama_for_image!(ms)
     return nothing
 end
 
@@ -608,24 +475,12 @@ end
 Generate image artifacts through the configured image backend and persist the
 turn in the session history.
 """
-function generate_images!(
-    ms::ModelSession,
-    request::ImageInterface.ImageGenerationRequest;
-    image_backend::Union{
-        ImageInterface.AbstractImageBackend,
-        Nothing,
-    } = nothing,
-    unload_ollama::Union{Bool,Nothing} = nothing,
-)::ModelResponse
+function generate_images!(ms::ModelSession, request::ImageInterface.ImageGenerationRequest; image_backend::Union{ImageInterface.AbstractImageBackend, Nothing} = nothing, unload_ollama::Union{Bool,Nothing} = nothing)::ModelResponse
     return lock(ms.lock) do
         _require_open(ms)
         selected = _select_image_backend(ms, image_backend)
         _prepare_image_generation!(ms, selected, unload_ollama)
-        return OllamaClient.generate_images!(
-            ms.session,
-            selected,
-            request,
-        )
+        return OllamaClient.generate_images!(ms.session, selected, request)
     end
 end
 
@@ -639,10 +494,7 @@ use `image_backend=` for a concrete ComfyUI or custom backend.
 function generate_images!(
     ms::ModelSession,
     prompt::AbstractString;
-    image_backend::Union{
-        ImageInterface.AbstractImageBackend,
-        Nothing,
-    } = nothing,
+    image_backend::Union{ImageInterface.AbstractImageBackend, Nothing} = nothing,
     backend::Union{Symbol,Nothing} = nothing,
     endpoint::AbstractString = "/v1/images/generations",
     size::Union{AbstractString,Nothing} = nothing,
@@ -667,15 +519,11 @@ function generate_images!(
     selected_width = isnothing(width) ? nothing : Int(width)
     selected_height = isnothing(height) ? nothing : Int(height)
     if !isnothing(size)
-        isnothing(width) && isnothing(height) || throw(ArgumentError(
-            "use either size or width/height, not both",
-        ))
+        isnothing(width) && isnothing(height) || throw(ArgumentError("use either size or width/height, not both"))
         selected_width, selected_height = _image_dimensions(size)
     end
     selected_count = isnothing(n) ? Int(count) : Int(n)
-    isnothing(n) || count == 1 || throw(ArgumentError(
-        "use either n or count, not both",
-    ))
+    isnothing(n) || count == 1 || throw(ArgumentError("use either n or count, not both"))
 
     selected_backend = _select_image_backend(ms, image_backend)
     ollama_keywords = !isnothing(backend) ||
@@ -686,49 +534,15 @@ function generate_images!(
                       request_timeout != ms.request_timeout ||
                       cli_timeout != 300.0
     if ollama_keywords
-        isnothing(image_backend) || throw(ArgumentError(
-            "backend and image_backend cannot be supplied together",
-        ))
-        selected_backend = OllamaClient.OllamaImageBackend(
-            ms.session.model;
-            transport = something(backend, :auto),
-            endpoint,
-            quality,
-            style,
-            user,
-            request_timeout = _nonnegative_timeout(
-                request_timeout,
-                "request_timeout",
-            ),
-            cli_timeout,
-        )
+        isnothing(image_backend) || throw(ArgumentError("backend and image_backend cannot be supplied together"))
+        selected_backend = OllamaClient.OllamaImageBackend(ms.session.model; transport = something(backend, :auto), endpoint, quality, style, user, request_timeout = _nonnegative_timeout(request_timeout,"request_timeout"), cli_timeout)
     end
 
-    request = ImageInterface.ImageGenerationRequest(
-        prompt;
-        negative_prompt,
-        width = selected_width,
-        height = selected_height,
-        count = selected_count,
-        seed,
-        steps,
-        cfg_scale,
-        sampler_name,
-        scheduler,
-        filename_prefix,
-    )
-    return generate_images!(
-        ms,
-        request;
-        image_backend = selected_backend,
-        unload_ollama,
-    )
+    request = ImageInterface.ImageGenerationRequest(prompt; negative_prompt, width = selected_width, height = selected_height, count = selected_count, seed, steps, cfg_scale, sampler_name, scheduler, filename_prefix)
+    return generate_images!(ms, request; image_backend = selected_backend, unload_ollama)
 end
 
-function set_image_backend!(
-    ms::ModelSession,
-    backend::ImageInterface.AbstractImageBackend,
-)::ModelSession
+function set_image_backend!(ms::ModelSession, backend::ImageInterface.AbstractImageBackend)::ModelSession
     lock(ms.lock) do
         _require_open(ms)
         ms.image_backend = backend
@@ -737,10 +551,7 @@ function set_image_backend!(
 end
 
 
-function set_temperature!(
-    ms::ModelSession,
-    temperature::Real,
-)::ModelSession
+function set_temperature!(ms::ModelSession, temperature::Real)::ModelSession
     value = _temperature(temperature)
     lock(ms.lock) do
         _require_open(ms)
@@ -758,10 +569,7 @@ function set_thinking!(ms::ModelSession, value)::ModelSession
     return ms
 end
 
-function set_reasoning_visible!(
-    ms::ModelSession,
-    visible::Bool,
-)::ModelSession
+function set_reasoning_visible!(ms::ModelSession, visible::Bool)::ModelSession
     lock(ms.lock) do
         _require_open(ms)
         ms.show_reasoning = visible
@@ -778,33 +586,20 @@ function set_keep_alive!(ms::ModelSession, value)::ModelSession
     return ms
 end
 
-function set_timeouts!(
-    ms::ModelSession;
-    request_timeout::Union{Real,Nothing} = nothing,
-    read_idle_timeout::Union{Real,Nothing} = nothing,
-)::ModelSession
+function set_timeouts!(ms::ModelSession; request_timeout::Union{Real,Nothing} = nothing, read_idle_timeout::Union{Real,Nothing} = nothing)::ModelSession
     lock(ms.lock) do
         _require_open(ms)
         if !isnothing(request_timeout)
-            ms.request_timeout = _nonnegative_timeout(
-                request_timeout,
-                "request_timeout",
-            )
+            ms.request_timeout = _nonnegative_timeout(request_timeout, "request_timeout")
         end
         if !isnothing(read_idle_timeout)
-            ms.read_idle_timeout = _nonnegative_timeout(
-                read_idle_timeout,
-                "read_idle_timeout",
-            )
+            ms.read_idle_timeout = _nonnegative_timeout(read_idle_timeout, "read_idle_timeout")
         end
     end
     return ms
 end
 
-function set_tool_mode!(
-    ms::ModelSession,
-    mode::JupyTools.ToolMode,
-)::ModelSession
+function set_tool_mode!(ms::ModelSession, mode::JupyTools.ToolMode)::ModelSession
     lock(ms.lock) do
         _require_open(ms)
         mode == JupyTools.TOOLS_OFF || _ensure_tool_context!(ms)
@@ -815,16 +610,10 @@ end
 
 
 """Install a programmatically configured tool context for this session."""
-function set_tool_context!(
-    ms::ModelSession,
-    context::JupyTools.ToolContext,
-)::ModelSession
+function set_tool_context!(ms::ModelSession, context::JupyTools.ToolContext)::ModelSession
     lock(ms.lock) do
         _require_open(ms)
-        context.artifacts.root == ms.session.artifact_store.root ||
-            throw(ArgumentError(
-                "tool context must use the session artifact store",
-            ))
+        context.artifacts.root == ms.session.artifact_store.root || throw(ArgumentError("tool context must use the session artifact store"))
         ms.sandbox = context.sandbox
         ms.tool_context = context
     end
@@ -834,10 +623,7 @@ end
 function attach!(ms::ModelSession, path::AbstractString)::ArtifactRef
     artifact = lock(ms.lock) do
         _require_open(ms)
-        imported = ArtifactStore.import_artifact(
-            ms.session.artifact_store,
-            path,
-        )
+        imported = ArtifactStore.import_artifact(ms.session.artifact_store, path)
         push!(ms.attachments, imported)
         return imported
     end
@@ -867,30 +653,23 @@ function save(ms::ModelSession)::Nothing
     return nothing
 end
 
-compression_running(ms::ModelSession)::Bool =
-    OllamaClient.compression_running(ms.session)
+compression_running(ms::ModelSession)::Bool = OllamaClient.compression_running(ms.session)
 
-await_compression!(ms::ModelSession)::Nothing =
-    OllamaClient.await_compression!(ms.session)
+await_compression!(ms::ModelSession)::Nothing = OllamaClient.await_compression!(ms.session)
 
 last_response(ms::ModelSession) = OllamaClient.last_response(ms.session)
-last_response_metrics(ms::ModelSession) =
-    OllamaClient.last_response_metrics(ms.session)
+last_response_metrics(ms::ModelSession) = OllamaClient.last_response_metrics(ms.session)
 
 model_name(ms::ModelSession)::String = ms.session.model.name
 base_url(ms::ModelSession)::String = ms.session.model.base_url
-session_directory(ms::ModelSession)::Union{String,Nothing} =
-    ms.session.session_dir
+session_directory(ms::ModelSession)::Union{String,Nothing} = ms.session.session_dir
 system_prompt(ms::ModelSession)::String = ms.session.prompt
 default_temperature(ms::ModelSession)::Float64 = ms.temperature
 default_thinking(ms::ModelSession)::ThinkingRequest = ms.thinking
 default_keep_alive(ms::ModelSession) = ms.keep_alive
 default_tool_mode(ms::ModelSession)::JupyTools.ToolMode = ms.tool_mode
-default_image_backend(
-    ms::ModelSession,
-)::ImageInterface.AbstractImageBackend = ms.image_backend
-artifact_store(ms::ModelSession)::ArtifactStore.Store =
-    ms.session.artifact_store
+default_image_backend(ms::ModelSession)::ImageInterface.AbstractImageBackend = ms.image_backend
+artifact_store(ms::ModelSession)::ArtifactStore.Store = ms.session.artifact_store
 sandbox_config(ms::ModelSession)::Sandboxing.SandboxConfig = ms.sandbox
 model_capabilities(ms::ModelSession) = ms.capabilities
 
@@ -910,7 +689,7 @@ function Base.close(ms::ModelSession)::Nothing
         catch error
             session_error = error
         end
-        if ms.stop_model_on_close
+        if ms.stop_model_on_close && !ms.ollama_unloaded_for_image
             try
                 OllamaClient.stop_model!(ms.session.model)
             catch error
@@ -934,15 +713,7 @@ function _print_artifacts(response::ModelResponse)::Nothing
     isempty(artifacts) && return nothing
     println("Artifacts:")
     for artifact in artifacts
-        println(
-            "  ",
-            artifact.path,
-            " (",
-            artifact.mime_type,
-            ", ",
-            artifact.size_bytes,
-            " bytes)",
-        )
+        println("  ",artifact.path," (",artifact.mime_type,", ",artifact.size_bytes," bytes)")
     end
     return nothing
 end
@@ -963,6 +734,7 @@ function _show_help()::Nothing
     println("  \\tools [off|ask|auto]")
     println("  \\imagebackend")
     println("  \\image PROMPT")
+    println("  \\comfy | \\imagebackend")
     println("  \\attach PATH")
     println("  \\attachments | \\clearattachments")
     println("  \\artifacts | \\sandbox | \\save")
@@ -970,10 +742,7 @@ function _show_help()::Nothing
     return nothing
 end
 
-function _handle_common_command!(
-    ms::ModelSession,
-    input::AbstractString,
-)::Bool
+function _handle_common_command!(ms::ModelSession,input::AbstractString)::Bool
     stripped = String(strip(input))
     startswith(stripped, "\\") || return false
     parts = split(stripped; limit = 2)
@@ -1004,12 +773,9 @@ function _handle_common_command!(
         end
     elseif command == "\\reasoning"
         normalized = lowercase(argument)
-        normalized in ("show", "on") &&
-            set_reasoning_visible!(ms, true)
-        normalized in ("hide", "off") &&
-            set_reasoning_visible!(ms, false)
-        normalized in ("show", "on", "hide", "off") ||
-            throw(ArgumentError("use \\reasoning show or hide"))
+        normalized in ("show", "on") && set_reasoning_visible!(ms, true)
+        normalized in ("hide", "off") && set_reasoning_visible!(ms, false)
+        normalized in ("show", "on", "hide", "off") || throw(ArgumentError("use \\reasoning show or hide"))
         println("Reasoning display: ", ms.show_reasoning ? "show" : "hide")
     elseif command == "\\tools"
         if isempty(argument)
@@ -1018,23 +784,25 @@ function _handle_common_command!(
             set_tool_mode!(ms, _tool_mode(argument))
             println("Tool mode set to ", default_tool_mode(ms))
         end
+    elseif command == "\\comfy"
+        isempty(argument) || throw(ArgumentError("\\comfy does not accept arguments!"))
+        status = ComfyLifecycle.lifecycle_status()
+        println("ComfyUI endpoint: ", status.endpoint)
+        println("Running: ", status.running)
+        println("Owned by this Julia process: ", status.owned)
+        println("Other PhluxAI borrowers: ", status.other_phluxai_borrowers)
     elseif command == "\\imagebackend"
-        isempty(argument) || throw(ArgumentError(
-            "\\imagebackend does not accept an argument",
-        ))
+        isempty(argument) || throw(ArgumentError("\\imagebackend does not accept an argument"))
         backend = default_image_backend(ms)
         println("Image backend: ", ImageInterface.backend_name(backend))
         println("Local only: ", ImageInterface.is_local_backend(backend))
         println("Resource policy: ", ImageInterface.resource_policy(backend))
     elseif command == "\\image"
-        isempty(argument) && throw(ArgumentError(
-            "\\image requires a generation prompt",
-        ))
+        isempty(argument) && throw(ArgumentError("\\image requires a generation prompt"))
         response = generate_images!(ms, argument)
         _print_artifacts(response)
     elseif command == "\\attach"
-        isempty(argument) &&
-            throw(ArgumentError("\\attach requires a file path"))
+        isempty(argument) && throw(ArgumentError("\\attach requires a file path"))
         artifact = attach!(ms, argument)
         println("Attached: ", artifact.path)
     elseif command == "\\attachments"
@@ -1068,11 +836,14 @@ function _is_exit_command(input::AbstractString)::Bool
     return command in ("\\exit", "\\quit", "\\bye")
 end
 
-function repl(
-    ms::ModelSession;
-    close_on_exit::Bool = true,
-)::Nothing
+# Final interactive message reflecting whether conversation history was persisted.
+function _repl_close_message(session_dir::Union{Nothing,AbstractString})::String
+    return isnothing(session_dir) ? "Session closed. Goodbye." : "Session saved. Goodbye."
+end
+
+function repl(ms::ModelSession; close_on_exit::Bool = true)::Nothing
     _require_open(ms)
+    ComfyLifecycle.enter_interactive_repl!()
     println("Model ready. Type '\\help' for commands.")
     println("─" ^ 60)
     try
@@ -1098,34 +869,30 @@ function repl(
                 continue
             end
             attachments = pending_attachments(ms)
-            input = isempty(attachments) ?
-                ModelInput(stripped) : ModelInput(stripped, attachments)
+            input = isempty(attachments) ? ModelInput(stripped) : ModelInput(stripped, attachments)
             print("\nassistant> ")
             flush(stdout)
             try
-                response = respond!(
-                    ms,
-                    input;
-                    approval_callback = _approval_callback,
-                )
+                response = respond!(ms, input; approval_callback = _approval_callback)
                 clear_attachments!(ms)
                 _print_artifacts(response)
             catch error
                 if error isa InterruptException
                     println("\nRequest interrupted.")
                 else
-                    @warn "Request failed" exception = (
-                        error,
-                        catch_backtrace(),
-                    )
+                    @warn "Request failed" exception = (error, catch_backtrace(),)
                 end
             end
         end
     finally
-        if close_on_exit && isopen(ms)
-            println("\nClosing session...")
-            close(ms)
-            println("Session saved. Goodbye.")
+        try
+            if close_on_exit && isopen(ms)
+                println("\nClosing session...")
+                close(ms)
+                println(_repl_close_message(session_directory(ms)))
+            end
+        finally
+            ComfyLifecycle.leave_interactive_repl!(; close_on_exit)
         end
     end
     return nothing
@@ -1137,11 +904,7 @@ macro model(model_name, session_dir = nothing)
     repl_ref = GlobalRef(_SELF_MODULE, :repl)
     return quote
         local _cfg, _ = $budget_ref()
-        local _session = $constructor_ref(
-            $(esc(model_name));
-            cfg = _cfg,
-            session_dir = $(esc(session_dir)),
-        )
+        local _session = $constructor_ref($(esc(model_name)); cfg = _cfg, session_dir = $(esc(session_dir)),)
         $repl_ref(_session)
     end
 end

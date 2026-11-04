@@ -139,7 +139,7 @@ jupip show comfy-cli
 comfy --version
 ```
 
-For image generation, start the locally configured ComfyUI server:
+For image generation, you can start the locally configured ComfyUI server:
 
 ```bash
 comfy launch --background
@@ -162,6 +162,20 @@ Stop it with:
 ```bash
 comfy stop
 ```
+
+Alternatively, you may rely on the interactive Julia REPL, which autostarts the local service when enabled. Manual commands remain available:
+
+```julia
+using PhluxAI
+
+set_default_image_workflow!("/path/to/workflow_api.json", bindings)
+@imagemodel "v1-5-pruned-emaonly-fp16.safetensors"
+@model "qwen2.5-coder:latest"
+```
+
+Inside the macro REPL, `\\comfy` reports service status and `\\image ...` uses the managed backend. Type `\\exit` to close the model session and return to the Julia REPL. Typing `exit()` in the outer Julia REPL invokes automatic ComfyUI shutdown.
+
+To use an externally shared ComfyUI server, set `PHLUXAI_COMFY_AUTOSTART=0` before launching Julia, start ComfyUI yourself, and PhluxAI will reuse it without automatic shutdown. 
 
 ## Install models
 

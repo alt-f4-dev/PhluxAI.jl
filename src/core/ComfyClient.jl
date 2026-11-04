@@ -580,12 +580,15 @@ end
 
 function _history_complete(entry::Dict{String,Any})::Bool
     status = get(entry, "status", nothing)
+
     if status isa AbstractDict
         completed = get(status, "completed", nothing)
         completed isa Bool && return completed
+
         status_text = lowercase(String(get(status, "status_str", "")))
-        status_text == "success" && return true
+        return status_text == "success"
     end
+
     outputs = get(entry, "outputs", nothing)
     return outputs isa AbstractDict && !isempty(outputs)
 end
@@ -685,6 +688,15 @@ function _collect_images!(
             image isa AbstractDict || continue
             image_index += 1
             bytes = _download_image(backend, image)
+
+            # Identify image data from its contents, not its filename.
+            mime_type = ArtifactStore.detect_mime_type(bytes)
+
+            startswith(mime_type, "image/") || throw(ErrorException(
+                "ComfyUI returned invalid image data for " *
+                "output $(image_index)",
+            ))
+
             filename = request.filename_prefix * "-" *
                        string(job_index) * "-" *
                        string(image_index) * _extension(image)
@@ -694,6 +706,7 @@ function _collect_images!(
                     store,
                     bytes;
                     filename,
+                    mime_type,
                     prefix = request.filename_prefix,
                 ),
             )
@@ -734,23 +747,46 @@ function ImageInterface.generate_images(
     batched = !isnothing(backend.bindings.batch_size)
     job_count = batched ? 1 : request.count
     batch_size = batched ? request.count : 1
-    for job_index in 1:job_count
-        workflow = _workflow_for_request(
-            backend,
-            request;
-            ordinal = job_index,
-            batch_size,
-        )
-        prompt_id = _queue_prompt(backend, workflow)
-        history = _wait_for_history(backend, prompt_id)
-        _collect_images!(
-            artifacts,
-            backend,
-            history,
-            store,
-            request,
-            job_index,
-        )
+    try
+        for job_index in 1:job_count
+            workflow = _workflow_for_request(
+                backend,
+                request;
+                ordinal = job_index,
+                batch_size,
+            )
+
+            prompt_id = _queue_prompt(backend, workflow)
+            history = _wait_for_history(backend, prompt_id)
+
+            _collect_images!(
+                artifacts,
+                backend,
+                history,
+                store,
+                request,
+                job_index,
+            )
+        end
+    catch
+        # Remove only artifacts created by this request.
+        for artifact in reverse(artifacts)
+            try
+                path = ArtifactStore.resolve_artifact(
+                    store,
+                    artifact,
+                )
+
+                isfile(path) && rm(path)
+            catch cleanup_error
+                @warn "Failed to clean up generated artifact" artifact.path exception = (
+                    cleanup_error,
+                    catch_backtrace(),
+                )
+            end
+        end
+
+        rethrow()
     end
     return ModelResponse(
         "Generated $(length(artifacts)) image artifact(s) with ComfyUI.";
@@ -763,12 +799,60 @@ function ImageInterface.generate_images(
     )
 end
 
+
+"""
+    release_memory!(backend::ComfyBackend; require_idle=true)
+
+Request that a local ComfyUI server unload cached models and
+release memory. The request is asynchronous: successful return
+confirms acknowledgement, not completed memory reclamation.
+
+When require_idle=true, refuse to release memory while the
+ComfyUI execution queue is occupied.
+"""
+function release_memory!(
+    backend::ComfyBackend;
+    require_idle::Bool = true,
+)::Nothing
+    ImageInterface.is_local_backend(backend) || throw(
+        ArgumentError("ComfyUI memory release requires a local backend")
+    )
+
+    if require_idle
+        queue = _get_json(backend, "/queue")
+        running = get(queue, "queue_running", nothing)
+        pending = get(queue, "queue_pending", nothing)
+
+        running isa AbstractVector && pending isa AbstractVector ||
+            throw(ErrorException("ComfyUI returned an invalid queue state"))
+
+        isempty(running) && isempty(pending) ||
+            throw(ErrorException("ComfyUI memory release requires an idle queue"))
+    end
+
+    payload = Dict(
+        "unload_models" => true,
+        "free_memory" => true,
+    )
+
+    _request(
+        backend,
+        "POST",
+        "/free";
+        body = collect(codeunits(JSON3.write(payload))),
+    )
+
+    return nothing
+end
+
+
 export COMFY_BASE,
        WorkflowBinding,
        ComfyBindings,
        ComfyBackend,
        with_model,
        load_workflow,
-       available
+       available,
+       release_memory!
 
 end # module ComfyClient

@@ -121,3 +121,72 @@ const TEST_BINDINGS = ComfyBindings(
 
     clear_default_image_workflow!()
 end
+
+
+@testset "ComfyUI execution completion" begin
+    CC = PhluxAI.ComfyClient
+
+    partial_history = Dict{String,Any}(
+        "status" => Dict{String,Any}(
+            "status_str" => "running",
+        ),
+        "outputs" => Dict{String,Any}(
+            "9" => Dict{String,Any}(
+                "images" => [
+                    Dict("filename" => "partial.png"),
+                ],
+            ),
+        ),
+    )
+
+    # Partial outputs must not imply completed execution.
+    @test !CC._history_complete(partial_history)
+
+    # Explicitly completed execution should be accepted.
+    completed_history = deepcopy(partial_history)
+    completed_history["status"]["status_str"] = "success"
+
+    @test CC._history_complete(completed_history)
+end
+
+@testset "ComfyUI completion edge cases" begin
+    CC = PhluxAI.ComfyClient
+
+    status = Dict{String,Any}(
+        "completed" => false,
+        "status_str" => "success",
+    )
+
+    entry = Dict{String,Any}(
+        "status" => status,
+        "outputs" => Dict{String,Any}(
+            "9" => Dict{String,Any}(
+                "images" => Any[],
+            ),
+        ),
+    )
+
+    # Explicit completion Boolean takes precedence.
+    @test !CC._history_complete(entry)
+
+    status["completed"] = true
+    @test CC._history_complete(entry)
+
+    # Failed execution must not report completion.
+    delete!(status, "completed")
+    status["status_str"] = "failed"
+
+    @test !CC._history_complete(entry)
+    @test CC._execution_error(entry) == "failed"
+
+    # An empty status object is not proof of completion.
+    entry["status"] = Dict{String,Any}()
+    @test !CC._history_complete(entry)
+
+    # Preserve the existing legacy response fallback.
+    delete!(entry, "status")
+    @test CC._history_complete(entry)
+
+    entry["outputs"] = Dict{String,Any}()
+    @test !CC._history_complete(entry)
+end

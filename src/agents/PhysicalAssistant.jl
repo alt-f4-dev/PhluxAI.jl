@@ -6,6 +6,7 @@ import ..JupyTools
 import ..ModelSessions
 import ..OllamaClient
 import ..ProtocolTypes
+import ..ComfyLifecycle
 
 import ..OllamaClient: ask!, await_compression!, compression_running
 import ..ProtocolTypes: ModelInput,
@@ -525,6 +526,7 @@ function repl(
     close_on_exit::Bool = true,
 )::Nothing
     isopen(pa) || throw(ArgumentError("PhysicsAssistant is closed"))
+    ComfyLifecycle.enter_interactive_repl!()
     fallback_mode = isnothing(mode) ? default_mode(pa) : mode
     println("Physics Assistant ready. Type '\\help' for commands.")
     println("Mode sigils: \\general, \\derive, \\code, \\draft")
@@ -590,10 +592,14 @@ function repl(
             end
         end
     finally
-        if close_on_exit && isopen(pa)
-            println("\nClosing session...")
-            close(pa)
-            println("Session saved. Goodbye.")
+        try
+            if close_on_exit && isopen(pa)
+                println("\nClosing session...")
+                close(pa)
+                println(ModelSession._repl_close_message(session_directory(pa)))
+            end
+        finally
+            ComfyLifecycle.leave_interactive_repl!(; close_on_exit)
         end
     end
     return nothing
