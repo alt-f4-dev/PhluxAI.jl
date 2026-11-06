@@ -111,6 +111,84 @@ function _register_lease!()::Nothing
     return nothing
 end
 
+"""Serialize ownership/lease changes across Julia processes on Linux.
+The registry lock is never deleted: unlinking a lock file can split lock domains.
+"""
+function _with_registry_lock(f::Function)
+    Sys.islinux() || return f()
+    path = joinpath(_lease_directory(), "registry.lock")
+    return open(path, "a+") do io
+        fd = Base.fd(io)
+        ccall(:flock, Cint, (Cint, Cint), fd, 2) == 0 || throw(SystemError("flock registry lock", Base.Libc.errno()))
+        try
+            return f()
+        finally
+            ccall(:flock, Cint, (Cint, Cint), fd, 8) == 0 || @warn "Unable to unlock ComfyUI registry"
+        end
+    end
+end
+
+_owner_path()::String = joinpath(_lease_directory(), "managed-owner")
+
+"""Remember the exact server PID/start time so the last borrower can stop it."""
+function _write_managed_owner!(owner)::Nothing
+    path = _owner_path()
+    temporary = tempname(dirname(path))
+    try
+        open(temporary, "w") do io
+            println(io, owner.pid, " ", owner.stamp)
+        end
+        mv(temporary, path; force = true)
+    finally
+        isfile(temporary) && rm(temporary; force = true)
+    end
+    return nothing
+end
+
+function _read_managed_owner()::Union{Nothing,NamedTuple{(:pid, :stamp),Tuple{Int,String}}}
+    path = _owner_path()
+    isfile(path) || return nothing
+    fields = split(strip(read(path, String)))
+    length(fields) == 2 || return nothing
+    pid = tryparse(Int, fields[1])
+    isnothing(pid) && return nothing
+    pid > 0 || return nothing
+    isempty(fields[2]) && return nothing
+    return (pid = pid, stamp = String(fields[2]))
+end
+
+"""Wait for the HTTP API after CLI launch without relinquishing ownership identity."""
+function _wait_for_api(url::AbstractString; timeout::Real = 30.0, poll_interval::Real = 0.25)::Bool
+    deadline = time() + timeout
+    while true
+        _available(url) && return true
+        time() >= deadline && return false
+        sleep(min(poll_interval, max(0.0, deadline - time())))
+    end
+end
+
+"""Stop only a process whose PID, start time, and comfy-cli metadata all match."""
+function _stop_verified_owner!(owner)::Bool
+    _process_stamp(owner.pid) == owner.stamp || return false
+    _background_matches(owner) || return false
+    _stop_matches(owner) || return false
+    result = _cli(["stop"]; deadline = 25)
+    data = get(result, :data, nothing)
+    return !isnothing(data) && Int(get(data, :pid, 0)) == owner.pid && get(data, :stopped, false) === true
+end
+
+"""Complete a managed server lifetime only after the final registered borrower exits."""
+function _finish_managed_owner!(owner; borrowers::Function = _has_other_borrowers, stop::Function = _stop_verified_owner!)::Symbol
+    borrowers() && return :borrowed
+    if _process_stamp(owner.pid) != owner.stamp
+        isfile(_owner_path()) && rm(_owner_path(); force = true)
+        return :stale
+    end
+    stop(owner) || return :unverified
+    isfile(_owner_path()) && rm(_owner_path(); force = true)
+    return :stopped
+end
+
 """Best-effort detection of live PhluxAI borrowers in other Julia processes."""
 function _has_other_borrowers()::Bool
     directory = _lease_directory()
@@ -167,34 +245,55 @@ end
 """Ensure the default local ComfyUI is running. Never claim a pre-existing server."""
 function ensure_default_running!()::Symbol
     return lock(_LOCK) do
-        if _available(COMFY_BASE)
-            _register_lease!()
-            owner = _OWNED[]
-            if !isnothing(owner) && _process_stamp(owner.pid) == owner.stamp
-                return :owned
+        _with_registry_lock() do
+            if _available(COMFY_BASE)
+                _register_lease!()
+                owner = _OWNED[]
+                if !isnothing(owner) && _process_stamp(owner.pid) == owner.stamp
+                    return :owned
+                end
+                _OWNED[] = nothing
+                return :borrowed
             end
-            _OWNED[] = nothing
-            return :borrowed
+            _enabled() || throw(ArgumentError(
+                "ComfyUI is not running and PHLUXAI_COMFY_AUTOSTART=0; start it with `comfy launch --background`",
+            ))
+            result = _cli(["launch", "--background"])
+            data = get(result, :data, nothing)
+            isnothing(data) && throw(ErrorException("ComfyUI launch returned no process metadata"))
+            pid = Int(get(data, :pid, 0))
+            url = String(get(data, :url, ""))
+            pid > 0 && url == COMFY_BASE || throw(ErrorException(
+                "ComfyUI launch reported an unexpected PID or endpoint; refusing to claim ownership",
+            ))
+            stamp = _process_stamp(pid)
+            isnothing(stamp) && throw(ErrorException(
+                "ComfyUI started, but its process identity cannot be verified; inspect the service manually",
+            ))
+            owner = (pid = pid, stamp = stamp)
+            # Persist identity before readiness polling. If cleanup fails,
+            # the exit hook can still safely retry the exact owned PID.
+            _write_managed_owner!(owner)
+            _OWNED[] = owner
+            _register_lease!()
+            if !_wait_for_api(COMFY_BASE)
+                stopped = try
+                    _stop_verified_owner!(owner)
+                catch error
+                    @warn "ComfyUI startup cleanup failed; inspect the server manually" exception = (error, catch_backtrace())
+                    false
+                end
+                if stopped
+                    isfile(_owner_path()) && rm(_owner_path(); force = true)
+                    _OWNED[] = nothing
+                    _release_lease!()
+                else
+                    @warn "ComfyUI API did not become ready; ownership retained for safe exit cleanup" pid
+                end
+                throw(ErrorException("ComfyUI API did not become ready within 30 seconds of successful CLI launch"))
+            end
+            return :owned
         end
-        _enabled() || throw(ArgumentError(
-            "ComfyUI is not running and PHLUXAI_COMFY_AUTOSTART=0; start it with `comfy launch --background`",
-        ))
-        result = _cli(["launch", "--background"])
-        data = get(result, :data, nothing)
-        isnothing(data) && throw(ErrorException("ComfyUI launch returned no process metadata"))
-        pid = Int(get(data, :pid, 0))
-        url = String(get(data, :url, ""))
-        pid > 0 && url == COMFY_BASE || throw(ErrorException(
-            "ComfyUI launch reported an unexpected PID or endpoint; refusing to claim ownership",
-        ))
-        _available(COMFY_BASE) || throw(ErrorException("ComfyUI launch returned successfully, but its API is unavailable"))
-        stamp = _process_stamp(pid)
-        isnothing(stamp) && throw(ErrorException(
-            "ComfyUI started, but its process identity cannot be verified; it will not be stopped automatically",
-        ))
-        _OWNED[] = (pid = pid, stamp = stamp)
-        _register_lease!()
-        return :owned
     end
 end
 
@@ -214,27 +313,30 @@ ensure_backend!(::Any)::Symbol = :not_comfy
 """Stop only the CLI-tracked PID started by this Julia process, if not shared."""
 function shutdown_owned!()::Nothing
     lock(_LOCK) do
-        owner = _OWNED[]
         try
-            if !isnothing(owner) && !isnothing(_LEASE[]) && !_has_other_borrowers() &&
-               _process_stamp(owner.pid) == owner.stamp && _background_matches(owner) && _stop_matches(owner)
-                result = _cli(["stop"]; deadline = 25)
-                data = get(result, :data, nothing)
-                if isnothing(data) || Int(get(data, :pid, 0)) != owner.pid || get(data, :stopped, false) !== true
-                    @warn "comfy-cli returned an unverified stop result; inspect the managed service manually"
+            _with_registry_lock() do
+                owner = isnothing(_OWNED[]) ? _read_managed_owner() : _OWNED[]
+                # Drop our own lease while holding the cross-process registry lock.
+                # Another process cannot register itself between this check and stop.
+                _release_lease!()
+                if !isnothing(owner)
+                    result = _finish_managed_owner!(owner)
+                    if result == :borrowed
+                        @info "ComfyUI left running for another PhluxAI process; last borrower will stop it"
+                    elseif result == :unverified
+                        @warn "Unable to verify or stop PhluxAI-managed ComfyUI; inspect the service manually" pid = owner.pid
+                    end
                 end
-            elseif !isnothing(owner) && _has_other_borrowers()
-                @info "ComfyUI left running because another PhluxAI process still uses it"
             end
         catch error
-            @warn "Unable to verify or stop PhluxAI-owned ComfyUI; leaving it for manual inspection" exception = (error, catch_backtrace())
-        finally
-            _OWNED[] = nothing
+            @warn "Unable to finalize PhluxAI ComfyUI lifecycle" exception = (error, catch_backtrace())
             try
                 _release_lease!()
-            catch error
-                @warn "Unable to remove ComfyUI lifecycle lease" exception = (error, catch_backtrace())
+            catch cleanup_error
+                @warn "Unable to remove ComfyUI lifecycle lease" exception = (cleanup_error, catch_backtrace())
             end
+        finally
+            _OWNED[] = nothing
         end
     end
     return nothing
@@ -255,34 +357,37 @@ end
 
 """Record an interactive session without starting or stopping any service."""
 function enter_interactive_repl!()::Nothing
-    # A prior interactive session may have stopped an owned server at \exit.
-    # Re-entry should restore autostart, but a text-only session remains usable
-    # if the optional image service cannot start.
-    if isinteractive() && _enabled() && Sys.islinux()
-        try
-            ensure_default_running!()
-        catch error
-            @warn "ComfyUI automatic restart unavailable; text-only PhluxAI remains usable" exception = (error, catch_backtrace())
-        end
-    end
     lock(_LOCK) do
+        # Startup and increment must be atomic against final-session shutdown.
+        if isinteractive() && _enabled() && Sys.islinux()
+            try
+                ensure_default_running!()
+            catch error
+                @warn "ComfyUI automatic restart unavailable; text-only PhluxAI remains usable" exception = (error, catch_backtrace())
+            end
+        end
         _ACTIVE_INTERACTIVE_REPLS[] += 1
     end
     return nothing
 end
 
 """
-Release an interactive session. Stop an owned ComfyUI when the final active
-interactive session closes. Externally started services are never stopped.
+Release an interactive session. Stop managed ComfyUI when the final session
+closes; if another process still borrows it, that borrower will stop it later.
 """
-function leave_interactive_repl!(; close_on_exit::Bool = true)::Nothing
-    should_stop = lock(_LOCK) do
+function _leave_interactive_repl!(close_on_exit::Bool, stop_owned::Function)::Nothing
+    lock(_LOCK) do
         _ACTIVE_INTERACTIVE_REPLS[] > 0 || throw(ArgumentError("unbalanced ComfyUI interactive REPL lifecycle"))
         _ACTIVE_INTERACTIVE_REPLS[] -= 1
-        return close_on_exit && _ACTIVE_INTERACTIVE_REPLS[] == 0
+        if close_on_exit && _ACTIVE_INTERACTIVE_REPLS[] == 0
+            stop_owned()
+        end
     end
-    should_stop && shutdown_owned!()
     return nothing
+end
+
+function leave_interactive_repl!(; close_on_exit::Bool = true)::Nothing
+    return _leave_interactive_repl!(close_on_exit, shutdown_owned!)
 end
 
 function register_exit_hook!()::Nothing

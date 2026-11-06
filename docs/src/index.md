@@ -47,25 +47,16 @@ For the physics profile:
 
 ## Quick image-enabled session
 
-After installing a compatible ComfyUI model and exporting an API-format
-workflow:
+After installing a compatible standard checkpoint, the built-in workflow needs no manual bindings:
 
 ```julia
 using PhluxAI
 
-bindings = ComfyBindings(
-    positive_prompt = WorkflowBinding("6", "text"),
-    model = WorkflowBinding("4", "ckpt_name"),
-)
-
-set_default_image_workflow!(
-    "/path/to/workflow_api.json",
-    bindings,
-)
-
-@imagemodel "sd_xl_base_1.0.safetensors"
+@imagemodel "v1-5-pruned-emaonly-fp16.safetensors"
 @model "qwen3-vl:4b"
 ```
+
+Use `set_default_image_workflow!` with explicit bindings for custom architectures.
 
 Then, inside the interactive session:
 

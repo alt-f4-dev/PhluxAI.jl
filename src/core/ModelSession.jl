@@ -172,7 +172,7 @@ function ModelSession(
         selected_image_backend,
         ArtifactRef[],
         stop_model_on_close,
-        false,
+        ollama_unloaded_for_image,
         ReentrantLock(),
         false,
     )
@@ -208,6 +208,7 @@ function ModelSession(
     poll_interval::Real = DEFAULT_POLL_INTERVAL,
     start_model::Bool = true,
     stop_model_on_close::Union{Bool,Nothing} = nothing,
+    ollama_unloaded_for_image::Bool = false,
     session_type::AbstractString = "model",
 )::ModelSession
     model = OllamaClient.OllamaModel(model_name, base_url)
@@ -247,6 +248,7 @@ function ModelSession(
             capabilities,
             image_backend,
             stop_model_on_close = stop_on_close,
+            ollama_unloaded_for_image,
         )
     catch
         if started && stop_on_close

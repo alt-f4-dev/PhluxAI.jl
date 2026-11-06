@@ -7,8 +7,7 @@ artifacts, and model-requested tool execution through `jupy` and `jupip`.
 The text/vision model and image-generation model are independent:
 
 - `@model` and `@agent` select the Ollama conversational model;
-- `@imagemodel` or `image=...` selects a ComfyUI image model when a default
-  ComfyUI workflow has been configured;
+- `@imagemodel` or `image=...` selects a ComfyUI checkpoint using the built-in standard graph, or a separately configured custom workflow;
 - `\image PROMPT` generates through the image backend attached to the active
   session.
 
@@ -150,11 +149,14 @@ filename identifies the model loaded by a workflow; the API-format workflow
 defines the graph that loads, conditions, samples, decodes, and saves the
 image.
 
-PhluxAI therefore requires explicit workflow bindings. `positive_prompt` is
-required for prompt injection. `model` is also required when selecting a model
-by filename through `@imagemodel` or `image="..."`.
+For compatible standard checkpoints, the built-in `ComfyWorkflow` graph already supplies the required bindings. No workflow path is necessary:
 
-For example:
+```julia
+@imagemodel "v1-5-pruned-emaonly-fp16.safetensors"
+@model "qwen3-vl:4b"
+```
+
+For custom workflows, `positive_prompt` is required and `model` must identify the model loader when a filename is selected. For example:
 
 ```julia
 bindings = ComfyBindings(
@@ -169,7 +171,7 @@ bindings = ComfyBindings(
     cfg_scale = WorkflowBinding("3", "cfg"),
     sampler_name = WorkflowBinding("3", "sampler_name"),
     scheduler = WorkflowBinding("3", "scheduler"),
-    filename_prefix = WorkflowBinding("9", "filename_prefix"),
+    filename_prefix = WorkflowBinding("9", "filename_prefix")
 )
 ```
 
@@ -179,10 +181,7 @@ workflow being used.
 Configure a model-neutral default workflow:
 
 ```julia
-set_default_image_workflow!(
-    "/path/to/sdxl_api.json",
-    bindings,
-)
+set_default_image_workflow!("/path/to/sdxl_api.json", bindings)
 ```
 
 The workflow can live anywhere on the filesystem. It does not have to exist in
@@ -216,18 +215,13 @@ The same selection can be written inline:
 or for an agent:
 
 ```julia
-@agent :physics "qwen3-vl:4b" \
-    image="sd_xl_base_1.0.safetensors"
+@agent :physics "qwen3-vl:4b" image="sd_xl_base_1.0.safetensors"
 ```
 
 An explicit backend is also accepted:
 
 ```julia
-backend = ComfyBackend(
-    "/path/to/sdxl_api.json",
-    bindings;
-    model = "sd_xl_base_1.0.safetensors",
-)
+backend = ComfyBackend("/path/to/sdxl_api.json", bindings; model = "sd_xl_base_1.0.safetensors")
 
 @model "qwen3-vl:4b" image=backend
 ```
@@ -507,11 +501,7 @@ Available fields:
 Important constraints:
 
 ```text
-num_ctx >
-    system_budget +
-    summary_budget +
-    max(response_budget, max_tokens) +
-    safety_margin
+num_ctx > system_budget + summary_budget + max(response_budget, max_tokens) + safety_margin
 
 0 < compression_frac <= 1
 m_verbatim must be nonnegative and even
@@ -534,41 +524,36 @@ callbacks, retain artifacts, or continue using a session after a terminal loop.
 ```julia
 using PhluxAI
 
-cfg = BudgetConfig(
-    num_ctx = 32768,
-    system_budget = 600,
-    summary_budget = 1200,
-    response_budget = 1024,
-    safety_margin = 512,
-    compression_frac = 0.7,
-    m_verbatim = 8,
-    exact_threshold = 200,
-    num_thread = 8,
-    max_tokens = 1024,
-)
+cfg = BudgetConfig(num_ctx = 32768,
+                   system_budget = 600,
+                   summary_budget = 1200,
+                   response_budget = 1024,
+                   safety_margin = 512,
+                   compression_frac = 0.7,
+                   m_verbatim = 8,
+                   exact_threshold = 200,
+                   num_thread = 8,
+                   max_tokens = 1024)
 
-session = ModelSession(
-    "gpt-oss:20b";
-    cfg,
-    system_prompt = "You are a precise technical research assistant.",
-    session_dir = "sessions/programmatic",
-    temperature = 0.2,
-    thinking = :high,
-    show_reasoning = false,
-    persist_reasoning = false,
-    keep_alive = "30m",
-    request_timeout = 300.0,
-    read_idle_timeout = 60.0,
-    tool_mode = TOOLS_OFF,
-    sandbox_backend = SANDBOX_AUTO,
-    sandbox_network = false,
-    sandbox_timeout = 120.0,
-    discover_capabilities = true,
-    timeout = 180,
-    poll_interval = 2.0,
-    start_model = true,
-    stop_model_on_close = true,
-)
+session = ModelSession("gpt-oss:20b"; cfg,
+                       system_prompt = "You are a precise technical research assistant.",
+                       session_dir = "sessions/programmatic",
+                       temperature = 0.2,
+                       thinking = :high,
+                       show_reasoning = false,
+                       persist_reasoning = false,
+                       keep_alive = "30m",
+                       request_timeout = 300.0,
+                       read_idle_timeout = 60.0,
+                       tool_mode = TOOLS_OFF,
+                       sandbox_backend = SANDBOX_AUTO,
+                       sandbox_network = false,
+                       sandbox_timeout = 120.0,
+                       discover_capabilities = true,
+                       timeout = 180,
+                       poll_interval = 2.0,
+                       start_model = true,
+                       stop_model_on_close = true)
 ```
 
 Common constructor controls:
@@ -605,12 +590,7 @@ Common constructor controls:
 For an externally managed or remote server:
 
 ```julia
-session = ModelSession(
-    "gpt-oss:20b";
-    base_url = "http://192.168.1.50:11434",
-    start_model = false,
-    stop_model_on_close = false,
-)
+session = ModelSession("gpt-oss:20b"; base_url = "http://192.168.1.50:14243", start_model = false, stop_model_on_close = false)
 ```
 
 ---
@@ -620,13 +600,7 @@ session = ModelSession(
 Use `respond!` for the full structured response:
 
 ```julia
-response = respond!(
-    session,
-    "Explain the result and expose reasoning separately.";
-    thinking = :high,
-    temperature = 0.15,
-    max_tokens = 768,
-)
+response = respond!(session, "Explain the result and expose reasoning separately."; thinking = :high, temperature = 0.15, max_tokens = 768)
 ```
 
 `respond!` returns a `ModelResponse`:
@@ -653,12 +627,7 @@ response_images(response)
 Use `ask!` when only final text is required:
 
 ```julia
-text = ask!(
-    session,
-    "State only the final result.";
-    temperature = 0.1,
-    max_tokens = 384,
-)
+text = ask!(session, "State only the final result."; temperature = 0.1, max_tokens = 384)
 ```
 
 The return value of `ask!` is a `String`.
@@ -666,12 +635,7 @@ The return value of `ask!` is a `String`.
 ### Non-streaming structured response
 
 ```julia
-response = respond!(
-    session,
-    "Return a concise answer.";
-    stream = false,
-    print_tokens = false,
-)
+response = respond!(session, "Return a concise answer."; stream = false, print_tokens = false)
 ```
 
 ### Stream into a selected IO object
@@ -679,13 +643,7 @@ response = respond!(
 ```julia
 buffer = IOBuffer()
 
-response = respond!(
-    session,
-    "Explain the derivation.";
-    io = buffer,
-    stream = true,
-    print_tokens = true,
-)
+response = respond!(session, "Explain the derivation."; io = buffer, stream = true, print_tokens = true)
 
 streamed_text = String(take!(buffer))
 ```
@@ -699,12 +657,7 @@ set_temperature!(session, 0.25)
 set_thinking!(session, :medium)
 set_reasoning_visible!(session, true)
 set_keep_alive!(session, "30m")
-
-set_timeouts!(
-    session;
-    request_timeout = 600.0,
-    read_idle_timeout = 120.0,
-)
+set_timeouts!(session; request_timeout = 600.0, read_idle_timeout = 120.0)
 ```
 
 Inspect the defaults:
@@ -724,47 +677,33 @@ for that call only.
 ## 11. Create a programmatic `PhysicsAssistant`
 
 ```julia
-assistant = PhysicsAssistant(
-    "gpt-oss:20b";
-    cfg,
-    session_dir = "sessions/scco-programmatic",
-    mode = DERIVE,
-    thinking = :high,
-    show_reasoning = false,
-    persist_reasoning = false,
-    tool_mode = TOOLS_ASK,
-    sandbox_backend = SANDBOX_AUTO,
-    sandbox_network = false,
-)
+assistant = PhysicsAssistant("gpt-oss:20b"; cfg,
+                             session_dir = "sessions/scco-programmatic",
+                             mode = DERIVE,
+                             thinking = :high,
+                             show_reasoning = false,
+                             persist_reasoning = false,
+                             tool_mode = TOOLS_ASK,
+                             sandbox_backend = SANDBOX_AUTO,
+                             sandbox_network = false)
 ```
 
 Use its default mode:
 
 ```julia
-response = respond!(
-    assistant,
-    "Derive the response-function pole condition.",
-)
+response = respond!(assistant, "Derive the response-function pole condition.")
 ```
 
 Select a mode for one turn:
 
 ```julia
-response = respond!(
-    assistant,
-    "Implement the result in Julia and produce a figure.";
-    mode = CODE,
-)
+response = respond!(assistant, "Implement the result in Julia and produce a figure."; mode = CODE)
 ```
 
 Text-only compatibility:
 
 ```julia
-text = ask!(
-    assistant,
-    "State the final instability condition.";
-    mode = DERIVE,
-)
+text = ask!(assistant, "State the final instability condition."; mode = DERIVE)
 ```
 
 Change the persistent mode:
@@ -790,10 +729,7 @@ set_temperature!(assistant, nothing)
 `PhysicalAgent` is an alias for `PhysicsAssistant`:
 
 ```julia
-assistant = PhysicalAgent(
-    "gpt-oss:20b";
-    mode = CODE,
-)
+assistant = PhysicalAgent("gpt-oss:20b"; mode = CODE)
 ```
 
 ---
@@ -803,15 +739,9 @@ assistant = PhysicalAgent(
 ### Import and send an image
 
 ```julia
-image = attach!(
-    session,
-    "data/detector_scan.png",
-)
+image = attach!(session, "data/detector_scan.png")
 
-input = ModelInput(
-    "Identify the dominant scattering features in this image.",
-    [image],
-)
+input = ModelInput("Identify the dominant scattering features in this image.", [image])
 
 response = respond!(session, input)
 ```
@@ -837,11 +767,7 @@ pending_attachments(session)
 ### Construct ordered multimodal parts
 
 ```julia
-input = ModelInput([
-    TextPart("Compare these two scans."),
-    ArtifactPart(scan_a),
-    ArtifactPart(scan_b),
-])
+input = ModelInput([TextPart("Compare these two scans."), ArtifactPart(scan_a), ArtifactPart(scan_b)])
 
 response = respond!(session, input)
 ```
@@ -882,14 +808,10 @@ bindings = ComfyBindings(
     width = WorkflowBinding("5", "width"),
     height = WorkflowBinding("5", "height"),
     steps = WorkflowBinding("3", "steps"),
-    cfg_scale = WorkflowBinding("3", "cfg"),
+    cfg_scale = WorkflowBinding("3", "cfg")
 )
 
-backend = ComfyBackend(
-    "/path/to/workflow_api.json",
-    bindings;
-    model = "sd_xl_base_1.0.safetensors",
-)
+backend = ComfyBackend("/path/to/workflow_api.json", bindings; model = "sd_xl_base_1.0.safetensors")
 ```
 
 `ComfyBackend` defaults to `http://127.0.0.1:8188` and
@@ -911,10 +833,7 @@ workflow = load_comfy_workflow("/path/to/workflow_api.json")
 ### Attach the backend to a session
 
 ```julia
-session = ModelSession(
-    "qwen3-vl:4b";
-    image_backend = backend,
-)
+session = ModelSession("qwen3-vl:4b"; image_backend = backend)
 ```
 
 A backend can also be changed later:
@@ -927,9 +846,7 @@ default_image_backend(session)
 Generate through the session:
 
 ```julia
-response = generate_images!(
-    session,
-    "Publication-style schematic of a two-leg spin ladder";
+response = generate_images!(session, "Publication-style schematic of a two-leg spin ladder"; 
     negative_prompt = "blurry, illegible labels",
     width = 1024,
     height = 1024,
@@ -939,7 +856,7 @@ response = generate_images!(
     cfg_scale = 7.0,
     sampler_name = "euler_ancestral",
     scheduler = "normal",
-    filename_prefix = "spin-ladder",
+    filename_prefix = "spin-ladder"
 )
 ```
 
@@ -960,13 +877,12 @@ end
 ### Backend-neutral request object
 
 ```julia
-request = ImageGenerationRequest(
-    "A reciprocal-space intensity map with fourfold symmetry";
+request = ImageGenerationRequest("A reciprocal-space intensity map with fourfold symmetry";
     width = 1024,
     height = 1024,
     seed = 1234,
     steps = 30,
-    cfg_scale = 6.5,
+    cfg_scale = 6.5
 )
 
 response = generate_images!(session, request)
@@ -979,23 +895,13 @@ The low-level form requires an explicit artifact store:
 ```julia
 store = ArtifactStore.Store("generated-images")
 
-response = generate_images(
-    backend,
-    "A publication-style scientific schematic";
-    artifact_store = store,
-    width = 1024,
-    height = 1024,
-)
+response = generate_images(backend, "A publication-style scientific schematic"; artifact_store = store, width = 1024, height = 1024)
 ```
 
 ### Explicit backend construction in an interactive macro
 
 ```julia
-@model "qwen3-vl:4b" image=ComfyBackend(
-    "/path/to/workflow_api.json",
-    bindings;
-    model = "sd_xl_base_1.0.safetensors",
-)
+@model "qwen3-vl:4b" image=ComfyBackend("/path/to/workflow_api.json", bindings; model = "sd_xl_base_1.0.safetensors")
 ```
 
 ### Ollama image-generation compatibility
@@ -1099,7 +1005,7 @@ context = ToolContext(
     sandbox_config(session),
     artifact_store(session);
     jupy_executable = "/home/user/.local/bin/jupy",
-    jupip_executable = "/home/user/.local/bin/jupip",
+    jupip_executable = "/home/user/.local/bin/jupip"
 )
 
 set_tool_context!(session, context)
@@ -1113,12 +1019,7 @@ set_tool_mode!(session, TOOLS_ASK)
 The preferred Linux backend is bubblewrap:
 
 ```julia
-session = ModelSession(
-    "gpt-oss:20b";
-    tool_mode = TOOLS_ASK,
-    sandbox_backend = SANDBOX_BWRAP,
-    sandbox_network = false,
-)
+session = ModelSession("gpt-oss:20b"; tool_mode = TOOLS_ASK, sandbox_backend = SANDBOX_BWRAP, sandbox_network = false)
 ```
 
 Automatic selection:
@@ -1133,12 +1034,7 @@ back to local execution unless `allow_unsafe_local=true`.
 Explicit local execution:
 
 ```julia
-session = ModelSession(
-    "gpt-oss:20b";
-    tool_mode = TOOLS_ASK,
-    sandbox_backend = SANDBOX_LOCAL,
-    allow_unsafe_local = true,
-)
+session = ModelSession("gpt-oss:20b"; tool_mode = TOOLS_ASK, sandbox_backend = SANDBOX_LOCAL, allow_unsafe_local = true)
 ```
 
 `SANDBOX_LOCAL` constrains paths and uses a session-local home and Julia depot,
@@ -1147,17 +1043,13 @@ but it is not a security boundary.
 Useful settings:
 
 ```julia
-session = ModelSession(
-    "gpt-oss:20b";
-    tool_mode = TOOLS_ASK,
-    sandbox_backend = SANDBOX_AUTO,
-    sandbox_network = false,
-    sandbox_timeout = 120.0,
-    sandbox_readonly_paths = [pwd()],
-    sandbox_environment = Dict(
-        "JULIA_NUM_THREADS" => "8",
-    ),
-)
+session = ModelSession("gpt-oss:20b"; 
+                       tool_mode = TOOLS_ASK, 
+                       sandbox_backend = SANDBOX_AUTO,
+                       sandbox_network = false,
+                       sandbox_timeout = 120.0,
+                       sandbox_readonly_paths = [pwd()],
+                       sandbox_environment = Dict("JULIA_NUM_THREADS" => "8"))
 ```
 
 Inspect the active configuration:
@@ -1184,10 +1076,7 @@ Absolute paths and path traversal outside the workspace are rejected.
 Obtain metrics from the structured response:
 
 ```julia
-response = respond!(
-    session,
-    "Give a concise explanation.";
-)
+response = respond!(session, "Give a concise explanation.")
 
 metrics = response.metrics
 ```
@@ -1217,31 +1106,15 @@ Convert durations and calculate throughput:
 ```julia
 ns_to_s(value::Integer)::Float64 = value / 1.0e9
 
-println(
-    "Client time: ",
-    round(ns_to_s(metrics.client_total_duration_ns); digits = 3),
-    " s",
-)
+println("Client time: ", round(ns_to_s(metrics.client_total_duration_ns); digits = 3), " s")
 
 if !isnothing(metrics.time_to_first_token_ns)
-    println(
-        "Time to first token: ",
-        round(ns_to_s(metrics.time_to_first_token_ns); digits = 3),
-        " s",
-    )
+    println("Time to first token: ", round(ns_to_s(metrics.time_to_first_token_ns); digits = 3), " s")
 end
 
-println(
-    "Prompt throughput: ",
-    round(prompt_rate(metrics); digits = 2),
-    " tokens/s",
-)
+println("Prompt throughput: ", round(prompt_rate(metrics); digits = 2), " tokens/s")
 
-println(
-    "Generation throughput: ",
-    round(generation_rate(metrics); digits = 2),
-    " tokens/s",
-)
+println("Generation throughput: ", round(generation_rate(metrics); digits = 2), " tokens/s")
 ```
 
 A reusable formatter:
@@ -1257,30 +1130,18 @@ function print_diagnostics(value)::Nothing
 
     ns_to_s(value::Integer)::Float64 = value / 1.0e9
 
-    println("Server total:  ",
-            round(ns_to_s(metrics.total_duration_ns); digits = 3), " s")
-    println("Model load:    ",
-            round(ns_to_s(metrics.load_duration_ns); digits = 3), " s")
-    println("Client total:  ",
-            round(ns_to_s(metrics.client_total_duration_ns); digits = 3), " s")
+    println("Server total:  ", round(ns_to_s(metrics.total_duration_ns); digits = 3), " s")
+    println("Model load:    ", round(ns_to_s(metrics.load_duration_ns); digits = 3), " s")
+    println("Client total:  ", round(ns_to_s(metrics.client_total_duration_ns); digits = 3), " s")
     println("Prompt tokens: ", metrics.prompt_eval_count)
     println("Output tokens: ", metrics.eval_count)
-    println("Prompt rate:   ",
-            round(prompt_rate(metrics); digits = 2), " tokens/s")
-    println("Output rate:   ",
-            round(generation_rate(metrics); digits = 2), " tokens/s")
+    println("Prompt rate:   ", round(prompt_rate(metrics); digits = 2), " tokens/s")
+    println("Output rate:   ", round(generation_rate(metrics); digits = 2), " tokens/s")
 
     if isnothing(metrics.time_to_first_token_ns)
         println("First token:   unavailable")
     else
-        println(
-            "First token:   ",
-            round(
-                ns_to_s(metrics.time_to_first_token_ns);
-                digits = 3,
-            ),
-            " s",
-        )
+        println("First token:   ", round(ns_to_s(metrics.time_to_first_token_ns); digits = 3), " s")
     end
 
     return nothing
@@ -1301,10 +1162,7 @@ print_diagnostics(assistant)
 Query a model directly:
 
 ```julia
-caps = model_capabilities(
-    "gpt-oss:20b";
-    base_url = "http://localhost:11434",
-)
+caps = model_capabilities("gpt-oss:20b"; base_url = "http://localhost:11434")
 
 capability_names(caps)
 supports(caps, :completion)
@@ -1323,10 +1181,7 @@ require_capability(caps, :vision)
 Inspect additional model metadata:
 
 ```julia
-details = show_model_details(
-    "gpt-oss:20b";
-    verbose = true,
-)
+details = show_model_details("gpt-oss:20b"; verbose = true)
 
 details.model
 details.family
@@ -1372,33 +1227,19 @@ close(session)
 Resume a generic session programmatically:
 
 ```julia
-session = load_model_session(
-    "gpt-oss:20b",
-    "sessions/programmatic";
-    temperature = 0.2,
-    thinking = :high,
-    tool_mode = TOOLS_OFF,
-)
+session = load_model_session("gpt-oss:20b", "sessions/programmatic"; temperature = 0.2, thinking = :high, tool_mode = TOOLS_OFF)
 ```
 
 Resume a physics session:
 
 ```julia
-assistant = load_assistant(
-    "gpt-oss:20b",
-    "sessions/scco-programmatic";
-    mode = DERIVE,
-    thinking = :high,
-)
+assistant = load_assistant("gpt-oss:20b", "sessions/scco-programmatic"; mode = DERIVE, thinking = :high)
 ```
 
 Equivalent alias:
 
 ```julia
-assistant = load_physical_agent(
-    "gpt-oss:20b",
-    "sessions/scco-programmatic",
-)
+assistant = load_physical_agent("gpt-oss:20b", "sessions/scco-programmatic")
 ```
 
 Inspect session identity and locations:
@@ -1421,10 +1262,7 @@ A programmatic session can enter the same interactive loop without losing the
 object:
 
 ```julia
-session = ModelSession(
-    "gpt-oss:20b";
-    session_dir = "sessions/retained",
-)
+session = ModelSession("gpt-oss:20b"; session_dir = "sessions/retained")
 
 repl(session; close_on_exit = false)
 
@@ -1436,10 +1274,7 @@ close(session)
 Physics assistant:
 
 ```julia
-assistant = PhysicsAssistant(
-    "gpt-oss:20b";
-    session_dir = "sessions/physics-retained",
-)
+assistant = PhysicsAssistant("gpt-oss:20b"; session_dir = "sessions/physics-retained")
 
 repl(assistant; close_on_exit = false)
 
@@ -1460,11 +1295,7 @@ const OC = PhluxAI.OllamaClient
 Preload a model:
 
 ```julia
-OC.start_model!(
-    "gpt-oss:20b";
-    timeout = 180,
-    poll_interval = 2.0,
-)
+OC.start_model!("gpt-oss:20b"; timeout = 180, poll_interval = 2.0)
 ```
 
 Unload it:
@@ -1476,17 +1307,9 @@ OC.stop_model!("gpt-oss:20b")
 Custom endpoint:
 
 ```julia
-OC.start_model!(
-    "gpt-oss:20b",
-    "http://192.168.1.50:11434";
-    timeout = 180,
-    poll_interval = 2.0,
-)
+OC.start_model!("gpt-oss:20b", "http://192.168.1.50:15646"; timeout = 180, poll_interval = 2.0)
 
-OC.stop_model!(
-    "gpt-oss:20b",
-    "http://192.168.1.50:11434",
-)
+OC.stop_model!("gpt-oss:20b", "http://192.168.1.50:15646")
 ```
 
 ---
@@ -1496,32 +1319,27 @@ OC.stop_model!(
 ```julia
 using PhluxAI
 
-cfg = BudgetConfig(
-    num_ctx = 32768,
-    summary_budget = 1200,
-    response_budget = 1024,
-    safety_margin = 512,
-    m_verbatim = 8,
-    num_thread = 8,
-    max_tokens = 1024,
-)
+cfg = BudgetConfig(num_ctx = 32768,
+                   summary_budget = 1200,
+                   response_budget = 1024,
+                   safety_margin = 512,
+                   m_verbatim = 8,
+                   num_thread = 8,
+                   max_tokens = 1024)
 
-session = ModelSession(
-    "gpt-oss:20b";
-    cfg,
-    session_dir = "sessions/full-example",
-    temperature = 0.2,
-    thinking = :high,
-    show_reasoning = false,
-    persist_reasoning = false,
-    keep_alive = "30m",
-    request_timeout = 300.0,
-    read_idle_timeout = 60.0,
-    tool_mode = TOOLS_ASK,
-    sandbox_backend = SANDBOX_AUTO,
-    sandbox_network = false,
-    sandbox_timeout = 120.0,
-)
+session = ModelSession("gpt-oss:20b"; cfg,
+                       session_dir = "sessions/full-example",
+                       temperature = 0.2,
+                       thinking = :high,
+                       show_reasoning = false,
+                       persist_reasoning = false,
+                       keep_alive = "30m",
+                       request_timeout = 300.0,
+                       read_idle_timeout = 60.0,
+                       tool_mode = TOOLS_ASK,
+                       sandbox_backend = SANDBOX_AUTO,
+                       sandbox_network = false,
+                       sandbox_timeout = 120.0)
 
 function approve_tool(call::ToolCall, risk::ToolRisk)::Bool
     println("Tool request: ", call.name, " [", risk, "]")
@@ -1529,14 +1347,12 @@ function approve_tool(call::ToolCall, risk::ToolRisk)::Bool
 end
 
 try
-    response = respond!(
-        session,
+    response = respond!(session,
         """
         Write a Julia script that evaluates sin(x), creates a PNG plot,
         executes it through jupy, and returns the figure artifact.
         """;
-        approval_callback = approve_tool,
-        max_tool_steps = 8,
+        approval_callback = approve_tool, max_tool_steps = 8
     )
 
     println("\nFinal text:")
@@ -1570,20 +1386,16 @@ end
 ```julia
 using PhluxAI
 
-assistant = PhysicsAssistant(
-    "gpt-oss:20b";
+assistant = PhysicsAssistant("gpt-oss:20b";
     session_dir = "sessions/multimodal-physics",
     mode = DERIVE,
     thinking = :high,
     show_reasoning = false,
-    tool_mode = TOOLS_OFF,
+    tool_mode = TOOLS_OFF
 )
 
 try
-    scan = attach!(
-        assistant,
-        "data/detector_scan.png",
-    )
+    scan = attach!(assistant, "data/detector_scan.png")
 
     input = ModelInput(
         """
@@ -1591,16 +1403,10 @@ try
         state the assumptions used, and distinguish observation from
         interpretation.
         """,
-        [scan],
+        [scan]
     )
 
-    response = respond!(
-        assistant,
-        input;
-        mode = DERIVE,
-        temperature = 0.1,
-        max_tokens = 1024,
-    )
+    response = respond!(assistant, input; mode = DERIVE, temperature = 0.1, max_tokens = 1024)
 
     println(response.text)
     print_diagnostics(assistant)
@@ -1620,13 +1426,13 @@ end
   ComfyUI image checkpoint unless `image=...` is supplied or a pending
   `@imagemodel` selection exists.
 - `@imagemodel` is one-shot and is consumed by the next `@model` or `@agent`.
-- `@imagemodel` requires a default ComfyUI workflow with `bindings.model`.
+- `@imagemodel` uses the built-in graph for compatible standard checkpoints; other architectures require a custom default workflow with `bindings.model`.
 - `\image PROMPT` uses the image backend already attached to the active
   session; it does not select a model on its own.
 - A ComfyUI image-model filename and a ComfyUI workflow are separate. The model
   name is written into the workflow loader input identified by
   `bindings.model`.
-- ComfyUI must be running before a `ComfyBackend` can generate images.
+- PhluxAI can autostart locally managed ComfyUI in interactive use; independently started services are never stopped automatically.
 - Image-model weights, the ComfyUI checkout, `.venv`, and generated images are
   runtime/user data and should not be committed to the PhluxAI source
   repository.

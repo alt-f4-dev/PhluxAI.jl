@@ -4,8 +4,7 @@ This guide covers the image-model and workflow installation required to use
 PhluxAI.jl's local ComfyUI image-generation backend.
 
 `Pkg.build("PhluxAI")` installs or validates `jupy-cli`, `comfy-cli`, and a
-local ComfyUI runtime. It deliberately does **not** download image-model weights
-or choose a workflow. Those remain explicit user choices.
+local ComfyUI runtime. It does **not** download image-model weights. PhluxAI provides a built-in standard-checkpoint workflow; specialized architectures still require a user-provided workflow.
 
 PhluxAI separates three things that should not be confused:
 
@@ -114,9 +113,7 @@ because it minimizes external dependencies.
 The general command is:
 
 ```bash
-comfy model download \
-    --url <MODEL_URL> \
-    --relative-path models/checkpoints
+comfy model download --url <MODEL_URL> --relative-path models/checkpoints
 ```
 
 The Comfy CLI documentation defines `models/checkpoints` as the default
@@ -132,9 +129,7 @@ comfy model list --relative-path models/checkpoints
 Remove a downloaded checkpoint when needed:
 
 ```bash
-comfy model remove \
-    --relative-path models/checkpoints \
-    --model-names <MODEL_FILENAME>
+comfy model remove --relative-path models/checkpoints --model-names <MODEL_FILENAME>
 ```
 
 ## 5. Concrete first-model example: SDXL base 1.0
@@ -179,8 +174,7 @@ For a default Linux PhluxAI installation, the file should ultimately be under:
 Optionally verify the file digest directly:
 
 ```bash
-sha256sum \
-    ~/.local/share/PhluxAI/comfy/ComfyUI/models/checkpoints/sd_xl_base_1.0.safetensors
+sha256sum ~/.local/share/PhluxAI/comfy/ComfyUI/models/checkpoints/sd_xl_base_1.0.safetensors
 ```
 
 If a custom workspace was configured, adjust the path accordingly.
@@ -274,8 +268,7 @@ Example:
 
 ```bash
 mkdir -p ~/.local/share/PhluxAI/workflows
-cp /path/to/exported_sdxl_api.json \
-    ~/.local/share/PhluxAI/workflows/sdxl_base_api.json
+cp /path/to/exported_sdxl_api.json ~/.local/share/PhluxAI/workflows/sdxl_base_api.json
 ```
 
 A workflow may be committed to the PhluxAI repository only when it is
@@ -361,7 +354,7 @@ bindings = ComfyBindings(
     cfg_scale = WorkflowBinding("<sampler-node>", "cfg"),
     sampler_name = WorkflowBinding("<sampler-node>", "sampler_name"),
     scheduler = WorkflowBinding("<sampler-node>", "scheduler"),
-    filename_prefix = WorkflowBinding("<save-node>", "filename_prefix"),
+    filename_prefix = WorkflowBinding("<save-node>", "filename_prefix")
 )
 ```
 
@@ -369,12 +362,10 @@ Only bind fields that actually exist in the workflow.
 
 ## 10. Configure the default PhluxAI image workflow
 
-Point PhluxAI at the exported API workflow:
+For compatible standard checkpoints, no configuration is required: `@imagemodel "file.safetensors"` uses the built-in `ComfyWorkflow` graph. For specialized or customized graphs, point PhluxAI at the exported API workflow:
 
 ```julia
-workflow = expanduser(
-    "~/.local/share/PhluxAI/workflows/sdxl_base_api.json",
-)
+workflow = expanduser("~/.local/share/PhluxAI/workflows/sdxl_base_api.json")
 
 set_default_image_workflow!(workflow, bindings)
 ```
@@ -401,7 +392,7 @@ application/startup code that creates the PhluxAI session.
 
 ## 11. Select the image model with `@imagemodel`
 
-After configuring a default workflow:
+For compatible standard checkpoints, select the model directly; otherwise configure your custom workflow first:
 
 ```julia
 @imagemodel "sd_xl_base_1.0.safetensors"
@@ -453,11 +444,7 @@ For maximum control, bypass the default workflow state and construct the
 backend explicitly:
 
 ```julia
-backend = ComfyBackend(
-    expanduser("~/.local/share/PhluxAI/workflows/sdxl_base_api.json"),
-    bindings;
-    model = "sd_xl_base_1.0.safetensors",
-)
+backend = ComfyBackend(expanduser("~/.local/share/PhluxAI/workflows/sdxl_base_api.json"), bindings; model = "sd_xl_base_1.0.safetensors")
 
 @model "qwen3-vl:4b" image=backend
 ```
@@ -473,13 +460,7 @@ A model filename supplied to `ComfyBackend(...; model=...)` requires a
 A retained session with an attached image backend can generate images through:
 
 ```julia
-response = generate_images!(
-    session,
-    "A publication-style schematic of a two-leg spin ladder";
-    width = 1024,
-    height = 1024,
-    n = 1,
-)
+response = generate_images!(session, "A publication-style schematic of a two-leg spin ladder"; width = 1024, height = 1024, n = 1)
 ```
 
 Inspect generated artifacts:
@@ -603,13 +584,9 @@ comfy model list --relative-path models/checkpoints
 The filename supplied by `@imagemodel` must match the filename expected by the
 workflow loader.
 
-### `@imagemodel` reports that no default workflow is configured
+### `@imagemodel` rejects a checkpoint or reports an incompatible workflow
 
-Configure one first:
-
-```julia
-set_default_image_workflow!(workflow_path, bindings)
-```
+The built-in graph is for compatible standard `.safetensors` and `.ckpt` checkpoints. For other architectures, construct a valid API-format workflow with matching `ComfyBindings`, then call `set_default_image_workflow!("/path/to/workflow_api.json", bindings)`.
 
 ### PhluxAI reports that model selection requires `bindings.model`
 

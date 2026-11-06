@@ -391,11 +391,7 @@ node `4` is the model loader and node `6` is the positive-prompt encoder.
 The fully explicit form does not require a process-wide default workflow:
 
 ```julia
-backend = ComfyBackend(
-    "/path/to/workflow_api.json",
-    bindings;
-    model = "sd_xl_base_1.0.safetensors",
-)
+backend = ComfyBackend("/path/to/workflow_api.json", bindings; model = "sd_xl_base_1.0.safetensors")
 
 @model "qwen3-vl:4b" image=backend
 ```
@@ -751,10 +747,7 @@ calling `set_default_image_workflow!`.
 A named model selection requires a model binding:
 
 ```julia
-bindings = ComfyBindings(
-    positive_prompt = WorkflowBinding("6", "text"),
-    model = WorkflowBinding("4", "ckpt_name"),
-)
+bindings = ComfyBindings(positive_prompt = WorkflowBinding("6", "text"), model = WorkflowBinding("4", "ckpt_name"))
 ```
 
 Additional bindings such as `negative_prompt`, `seed`, `width`, `height`,
@@ -765,10 +758,7 @@ the workflow exposes the corresponding binding.
 Configure a process-local model-neutral workflow:
 
 ```julia
-set_default_image_workflow!(
-    "/path/to/workflow_api.json",
-    bindings,
-)
+set_default_image_workflow!("/path/to/workflow_api.json", bindings)
 ```
 
 Then select the image model for the next session:
@@ -787,11 +777,7 @@ or select it inline:
 The fully explicit backend form is:
 
 ```julia
-@model "qwen3-vl:4b" image=ComfyBackend(
-    "/path/to/workflow_api.json",
-    bindings;
-    model = "sd_xl_base_1.0.safetensors",
-)
+@model "qwen3-vl:4b" image=ComfyBackend("/path/to/workflow_api.json", bindings; model = "sd_xl_base_1.0.safetensors")
 ```
 
 `@imagemodel` is one-shot and is consumed by the next `@model` or `@agent`.
@@ -858,9 +844,7 @@ redirect and make the configured origin explicit, normalize it after the
 build:
 
 ```bash
-git -C ~/.local/share/PhluxAI/comfy/ComfyUI \
-  remote set-url origin \
-  https://github.com/Comfy-Org/ComfyUI.git
+git -C ~/.local/share/PhluxAI/comfy/ComfyUI remote set-url origin https://github.com/Comfy-Org/ComfyUI.git
 ```
 
 Then verify:

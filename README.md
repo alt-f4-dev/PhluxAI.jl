@@ -15,7 +15,7 @@ The package provides both interactive macros such as `@model`, `@agent`, and
 `@imagemodel`, and programmatic APIs such as `ModelSession`,
 `PhysicsAssistant`, `respond!`, `generate_images!`, and `ComfyBackend`.
 
-Current development version: `0.0.1`.
+Current development version: `0.2.0`.
 
 ## Architecture
 
@@ -126,7 +126,7 @@ The build performs four external-runtime steps:
 3. create or reuse the project-local `.venv` and install `comfy-cli`;
 4. install and configure a persistent local ComfyUI workspace.
 
-See [BUILD.md](BUILD.md) for build flags, paths, accelerator selection,
+See [build documentation](docs/src/installation/build.md) for build flags, paths, accelerator selection,
 recovery behavior, and CI guidance.
 
 ## Verify the installed runtime
@@ -163,17 +163,16 @@ Stop it with:
 comfy stop
 ```
 
-Alternatively, you may rely on the interactive Julia REPL, which autostarts the local service when enabled. Manual commands remain available:
+Alternatively, the interactive Julia REPL autostarts the local service when enabled. A standard compatible checkpoint uses the built-in ComfyUI workflow without manual bindings:
 
 ```julia
 using PhluxAI
 
-set_default_image_workflow!("/path/to/workflow_api.json", bindings)
 @imagemodel "v1-5-pruned-emaonly-fp16.safetensors"
 @model "qwen2.5-coder:latest"
 ```
 
-Inside the macro REPL, `\\comfy` reports service status and `\\image ...` uses the managed backend. Type `\\exit` to close the model session and return to the Julia REPL. Typing `exit()` in the outer Julia REPL invokes automatic ComfyUI shutdown.
+Inside the macro REPL, `\\comfy` reports service status and `\\image ...` uses the selected backend. `\\exit` stops PhluxAI-managed ComfyUI after the last active interactive session (unless another Julia process holds a lease). The last borrower completes shutdown when it exits; an independently started service is never claimed.
 
 To use an externally shared ComfyUI server, set `PHLUXAI_COMFY_AUTOSTART=0` before launching Julia, start ComfyUI yourself, and PhluxAI will reuse it without automatic shutdown. 
 
@@ -200,9 +199,7 @@ Image-model weights are also user-selected. A checkpoint can be downloaded
 through the configured `comfy` command:
 
 ```bash
-comfy model download \
-  --url <MODEL_URL> \
-  --relative-path models/checkpoints
+comfy model download --url <MODEL_URL> --relative-path models/checkpoints
 ```
 
 With the default Linux workspace, checkpoint files normally live under:
@@ -251,24 +248,21 @@ Resume it later:
 
 ## Quick start: ComfyUI image generation
 
-PhluxAI requires an API-format ComfyUI workflow and bindings that identify the
-workflow inputs PhluxAI is allowed to change.
+For a compatible standard `.safetensors` or `.ckpt` checkpoint, the built-in `ComfyWorkflow` graph requires no manual workflow configuration:
 
-For example, for a workflow whose model loader is node `4` and positive prompt
-encoder is node `6`:
+```julia
+using PhluxAI
+@imagemodel "v1-5-pruned-emaonly-fp16.safetensors"
+@model "qwen2.5-coder:latest"
+```
+
+For specialized architectures or custom graphs, configure an API-format workflow and bindings explicitly. For example, for a workflow whose model loader is node `4` and positive prompt encoder is node `6`:
 
 ```julia
 using PhluxAI
 
-bindings = ComfyBindings(
-    positive_prompt = WorkflowBinding("6", "text"),
-    model = WorkflowBinding("4", "ckpt_name"),
-)
-
-set_default_image_workflow!(
-    "/path/to/workflow_api.json",
-    bindings,
-)
+bindings = ComfyBindings(positive_prompt = WorkflowBinding("6", "text"), model = WorkflowBinding("4", "ckpt_name"))
+set_default_image_workflow!("/path/to/workflow_api.json", bindings)
 ```
 
 The node IDs and input names are workflow-specific. They must match the
@@ -296,11 +290,7 @@ The same image model can be selected inline:
 or through a fully explicit backend:
 
 ```julia
-backend = ComfyBackend(
-    "/path/to/workflow_api.json",
-    bindings;
-    model = "sd_xl_base_1.0.safetensors",
-)
+backend = ComfyBackend("/path/to/workflow_api.json", bindings; model = "sd_xl_base_1.0.safetensors")
 
 @model "qwen3-vl:4b" image=backend
 ```
@@ -314,25 +304,11 @@ configured for the current Julia process until it is replaced or cleared.
 ```julia
 using PhluxAI
 
-backend = ComfyBackend(
-    "/path/to/workflow_api.json",
-    bindings;
-    model = "sd_xl_base_1.0.safetensors",
-)
+backend = ComfyBackend("/path/to/workflow_api.json", bindings; model = "sd_xl_base_1.0.safetensors")
 
-session = ModelSession(
-    "qwen3-vl:4b";
-    image_backend = backend,
-)
+session = ModelSession("qwen3-vl:4b"; image_backend = backend)
 
-response = generate_images!(
-    session,
-    "A publication-style schematic of a two-leg spin ladder";
-    width = 1024,
-    height = 1024,
-    steps = 30,
-    seed = 1234,
-)
+response = generate_images!(session, "A publication-style schematic of a two-leg spin ladder"; width = 1024, height = 1024, steps = 30, seed = 1234)
 
 for image in response_images(response)
     println(image.path)
@@ -384,7 +360,7 @@ and `comfy-cli` telemetry is disabled by the installer.
 
 ## Documentation
 
-- [BASICS.md](BASICS.md) — interactive and programmatic API usage.
-- [BUILD.md](BUILD.md) — external-runtime build, flags, paths, and recovery.
-- [OLLAMA.md](OLLAMA.md) — Ollama model installation and validation.
-- [COMFY.md](COMFY.md) — ComfyUI model and workflow installation.
+- [PhluxAI basics](docs/src/getting-started/basics.md) — interactive and programmatic API usage.
+- [build documentation](docs/src/installation/build.md) — external-runtime build, flags, paths, and recovery.
+- [Ollama documentation](docs/src/installation/ollama.md) — Ollama model installation and validation.
+- [ComfyUI documentation](docs/src/installation/comfy.md) — ComfyUI model and workflow installation.
