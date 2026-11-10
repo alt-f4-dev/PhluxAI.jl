@@ -31,6 +31,7 @@ const SUITE_MANIFEST = (
     (file = "test_ollama_latency.jl", tier = :benchmark),
     (file = "test_ollama_prompt_scaling.jl", tier = :benchmark),
     (file = "test_phase3_final_integration.jl", tier = :live),
+    (file = "test_research_contracts.jl", tier = :cpu),
     (file = "test_quiet_model_switching.jl", tier = :cpu),
     (file = "test_sandbox_layout.jl", tier = :sandbox),
     (file = "test_syntax.jl", tier = :cpu),

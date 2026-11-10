@@ -4,6 +4,7 @@ module PhluxAI
 using JSON3
 
 include("core/ProtocolTypes.jl")
+include("core/ResearchContracts.jl")
 include("core/Artifacts.jl")
 include("core/ModelCapabilities.jl")
 include("core/ImageInterface.jl")
@@ -27,9 +28,12 @@ import .ModelSessions
 import .OllamaClient
 import .PhysicalAssistant
 import .ProtocolTypes
+import .ResearchContracts
 import .Sandboxing
 
 import .OllamaClient: ask!, await_compression!, compression_running
+
+using .ResearchContracts: SourceRef, EvidenceRef, OperationRecord
 
 using .ProtocolTypes: ArtifactPart,
                       ArtifactRef,
@@ -661,6 +665,8 @@ include("core/precompile.jl")
 
 export @model, @agent, @resume, @budget, @imagemodel
 export PHLUXAI_VERSION, welcome
+
+export SourceRef, EvidenceRef, OperationRecord, ResearchContracts
 
 export ArtifactRef,
        ArtifactPart,
