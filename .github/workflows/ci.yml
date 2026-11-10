@@ -2,14 +2,19 @@ name: CPU regression tests
 
 on:
   push:
-    branches: [main]
+    branches: [main, PhluxAI-dev]
   pull_request:
 
 jobs:
   cpu-regressions:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        julia-version: ['1.12', '1.13']
     env:
+      PHLUXAI_TEST_PROFILE: 'cpu'
       PHLUXAI_BANNER: '0'
       PHLUXAI_COMFY_AUTOSTART: '0'
       PHLUXAI_SKIP_OLLAMA_INSTALL: '1'
@@ -19,9 +24,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v2
         with:
-          version: '1.12'
+          version: ${{ matrix.julia-version }}
       - uses: julia-actions/cache@v2
       - name: Instantiate environment
         run: julia --project=. --startup-file=no -e 'using Pkg; Pkg.instantiate()'
-      - name: Run isolated CPU regressions
+      - name: Run isolated CPU and mock-HTTP regressions
         run: julia --project=. --startup-file=no test/runtests.jl
