@@ -73,8 +73,9 @@ function exercise_pending_task_gate!(session::OC.ChatSession)
     return nothing
 end
 
-parent = joinpath(homedir(), ".local", "share", "PhluxAI")
-isdir(parent) || error("Expected existing PhluxAI data directory: $parent")
+# Synthetic CPU tests must not depend on a user-specific PhluxAI data directory.
+# Each mktempdir(parent; ...) call creates and removes an isolated test directory.
+parent = tempdir()
 
 @testset "Phase 3.11C: CPU-only compression invariants" begin
     default = test_config()

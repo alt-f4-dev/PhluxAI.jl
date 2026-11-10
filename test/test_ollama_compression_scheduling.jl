@@ -74,8 +74,9 @@ function admit_and_unlock!(session, message; max_tokens = 512)
     end
 end
 
-parent = joinpath(homedir(), ".local", "share", "PhluxAI")
-isdir(parent) || error("Expected existing PhluxAI data directory: $parent")
+# Synthetic CPU tests must not depend on a user-specific PhluxAI data directory.
+# Each mktempdir(parent; ...) call creates and removes an isolated test directory.
+parent = tempdir()
 
 @testset "Phase 3.11D2: capacity-aware scheduling (CPU only)" begin
     @testset "Capacity and requested response budget" begin

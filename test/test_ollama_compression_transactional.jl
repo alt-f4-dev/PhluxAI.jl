@@ -53,8 +53,9 @@ function commit!(session, candidate, tail, revision)
     end
 end
 
-parent = joinpath(homedir(), ".local", "share", "PhluxAI")
-isdir(parent) || error("Expected existing PhluxAI data directory: $parent")
+# Synthetic CPU tests must not depend on a user-specific PhluxAI data directory.
+# Each mktempdir(parent; ...) call creates and removes an isolated test directory.
+parent = tempdir()
 
 @testset "Phase 3.11D1: transactional compression (CPU only)" begin
     @testset "Candidate validation" begin

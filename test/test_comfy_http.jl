@@ -217,7 +217,9 @@ end
                 base_url = "http://127.0.0.1:$(HTTP.port(server))",
                 poll_interval = 0.01,
                 timeout = 2.0,
-                request_timeout = 2.0,
+                # Allow cold HTTP/JIT compilation on CI runners without
+                # changing the ComfyUI workflow-completion deadline.
+                request_timeout = 20.0,
             )
 
             store = PhluxAI.ArtifactStore.Store(

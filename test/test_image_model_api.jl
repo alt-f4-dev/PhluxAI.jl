@@ -67,9 +67,13 @@ const TEST_BINDINGS = ComfyBindings(
 
     clear_default_image_workflow!()
     @test isnothing(default_image_workflow())
-    @test_throws ArgumentError PhluxAI._resolve_image_backend(
-        "sd_xl_base_1.0.safetensors",
-    )
+
+    # A compatible standard checkpoint now works without configuring a graph.
+    builtin = PhluxAI._resolve_image_backend("sd_xl_base_1.0.safetensors")
+    @test builtin isa ComfyBackend
+    @test builtin.model == "sd_xl_base_1.0.safetensors"
+    @test builtin.workflow["4"]["class_type"] == "CheckpointLoaderSimple"
+    @test_throws ArgumentError PhluxAI._resolve_image_backend("unsupported.bin")
 
     template = set_default_image_workflow!(
         TEST_WORKFLOW,
@@ -78,11 +82,12 @@ const TEST_BINDINGS = ComfyBindings(
     @test isnothing(template.model)
     @test default_image_workflow() isa ComfyBackend
 
+    # @imagemodel selects for the next session but returns nothing.
     selected = @imagemodel "sd_xl_base_1.0.safetensors"
-    @test selected isa ComfyBackend
-    @test selected.model == "sd_xl_base_1.0.safetensors"
-    @test PhluxAI._take_image_backend!().model ==
-          "sd_xl_base_1.0.safetensors"
+    @test isnothing(selected)
+    pending = PhluxAI._take_image_backend!()
+    @test pending isa ComfyBackend
+    @test pending.model == "sd_xl_base_1.0.safetensors"
     @test isnothing(PhluxAI._take_image_backend!())
 
     model_named = macroexpand(
