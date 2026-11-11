@@ -33,7 +33,8 @@ import .Sandboxing
 
 import .OllamaClient: ask!, await_compression!, compression_running
 
-using .ResearchContracts: SourceRef, EvidenceRef, OperationRecord
+using .ResearchContracts: SourceRef, EvidenceRef, OperationRecord, ModelRef, ModelCapabilitySet, ModelDescriptor,
+                          contract_json, parse_contract, supports_capability, require_model_capability, capability_set
 
 using .ProtocolTypes: ArtifactPart,
                       ArtifactRef,
@@ -108,6 +109,12 @@ using .PhysicalAssistant: AssistantMode,
                           GENERAL,
                           PhysicalAgent,
                           PhysicsAssistant
+
+# Adapter for existing Ollama capability reports; the Ollama API remains unchanged.
+function ResearchContracts.capability_set(caps::ModelCapabilities)::ModelCapabilitySet
+    values = Symbol[Symbol(name) for name in caps.raw if occursin(r"^[a-z][a-z0-9_]*$", name)]
+    return ModelCapabilitySet(values)
+end
 
 const PHLUXAI_VERSION = v"0.2.0"
 const _MODEL_SESSION_TYPE = "model"
@@ -666,7 +673,8 @@ include("core/precompile.jl")
 export @model, @agent, @resume, @budget, @imagemodel
 export PHLUXAI_VERSION, welcome
 
-export SourceRef, EvidenceRef, OperationRecord, ResearchContracts
+export SourceRef, EvidenceRef, OperationRecord, ModelRef, ModelCapabilitySet, ModelDescriptor, ResearchContracts
+export contract_json, parse_contract, supports_capability, require_model_capability, capability_set
 
 export ArtifactRef,
        ArtifactPart,

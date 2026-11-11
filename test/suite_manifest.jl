@@ -19,6 +19,7 @@ const SUITE_MANIFEST = (
     (file = "test_image_model_api.jl", tier = :cpu),
     (file = "test_image_repl_continuity.jl", tier = :cpu),
     (file = "test_inference_configuration.jl", tier = :benchmark),
+    (file = "test_model_contracts.jl", tier = :cpu),
     (file = "test_model_session_initial_state.jl", tier = :cpu),
     (file = "test_multimodal_switch_latency.jl", tier = :benchmark),
     (file = "test_ollama_api_overhead.jl", tier = :benchmark),
