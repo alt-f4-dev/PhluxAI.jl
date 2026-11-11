@@ -54,8 +54,9 @@ struct ReadOnlyToolContractStub <: AbstractToolHandler end
         end
         encoded = contract_json(declaration)
         json = Dict{String,Any}(String(k) => v for (k,v) in pairs(JSON3.read(encoded)))
+        # Unsigned metadata permits valid edits; runtime policy must not trust its origin.
         json["risk"] = "TOOL_WRITE"
-        @test_throws ArgumentError parse_contract(ToolHandlerDeclaration, JSON3.write(json))
+        @test parse_contract(ToolHandlerDeclaration, JSON3.write(json)).risk == TOOL_WRITE
         json["risk"] = "UNKNOWN"
         @test_throws ArgumentError parse_contract(ToolHandlerDeclaration, JSON3.write(json))
         json["risk"] = "TOOL_NETWORK"
