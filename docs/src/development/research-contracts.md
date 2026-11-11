@@ -9,3 +9,11 @@ PhluxAI provides minimal, allocation-independent identity and provenance metadat
 `OperationRecord(id, action; inputs, outputs, parameters_json, status)` records an operation identifier, a tool/action name, source references, a JSON object of parameters, and an execution status. The constructor copies reference vectors to prevent later mutation through the original input vectors. The metadata record is not a durable journal or proof of execution. Its status and outputs must be recorded by a trusted controller, not by a language model's unsupported assertion.
 
 The current `ArtifactRef`, `ToolSpec`, `ToolExecution`, and `ModelCapabilities` remain unchanged. Higher-level source import, execution authorization, exact token counting, and model training are future implementation stages, not implied capabilities of these definitions.
+
+## Tool contracts and execution policy
+
+The metadata-only `ToolContracts` module adds `ExecutionPolicy`, `ToolHandlerDeclaration`, and `AbstractToolHandler`. It reuses existing `ToolSpec` and `ToolRisk` rather than creating competing tool registries. A declaration associates a stable handler ID, model-visible tool schema, risk class, and execution policy.
+
+The default policy requires Bubblewrap, explicit approval, network isolation, source access restricted to authorized sources, finite execution time, bounded memory, and bounded output. Metadata validation rejects automatic approval of network, write, and execute risk classes; a declared `:trusted_local` isolation policy requires explicit unsafe-local opt-in and explicit approval. It is **not** sufficient to enforce these restrictions at runtime; Stage 3 must implement independently validated authorization and isolation. `ToolContracts.tool_declaration` is an extension point for future handler implementations. No handler execution function is registered by Stage 2.
+
+`ExecutionPolicy` and `ToolHandlerDeclaration` support the same strict versioned JSON encoding. Deserialization of a trusted-local policy reconstructs its explicit unsafe-local declaration, not a runtime permission grant. These types must not be treated as capabilities or as proof that a sandbox was actually applied.

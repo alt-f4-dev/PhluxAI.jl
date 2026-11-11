@@ -48,7 +48,8 @@ makedocs(
                            "Ollama models" => "installation/ollama.md",
                            "ComfyUI models and workflows" => "installation/comfy.md"],
         "Reference" => "reference/api.md",
-        "Development" => ["Documentation" => "development/documentation.md"],
+        "Development" => ["Documentation" => "development/documentation.md",
+                          "Research contracts" => "development/research-contracts.md"],
     ],
     remote_options...,
 )

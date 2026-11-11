@@ -10,6 +10,7 @@ include("core/ModelCapabilities.jl")
 include("core/ImageInterface.jl")
 include("tools/Sandbox.jl")
 include("tools/JupyTools.jl")
+include("tools/ToolContracts.jl")
 include("core/OllamaClient.jl")
 include("core/ComfyClient.jl")
 include("core/ComfyWorkflow.jl")
@@ -29,6 +30,7 @@ import .OllamaClient
 import .PhysicalAssistant
 import .ProtocolTypes
 import .ResearchContracts
+import .ToolContracts
 import .Sandboxing
 
 import .OllamaClient: ask!, await_compression!, compression_running
@@ -94,6 +96,7 @@ using .JupyTools: ToolContext,
                   TOOL_WRITE,
                   default_registry,
                   register!
+using .ToolContracts: ExecutionPolicy, ToolHandlerDeclaration, AbstractToolHandler
 using .Sandboxing: ProcessResult,
                    SandboxBackend,
                    SandboxConfig,
@@ -674,6 +677,7 @@ export @model, @agent, @resume, @budget, @imagemodel
 export PHLUXAI_VERSION, welcome
 
 export SourceRef, EvidenceRef, OperationRecord, ModelRef, ModelCapabilitySet, ModelDescriptor, ResearchContracts
+export ExecutionPolicy, ToolHandlerDeclaration, AbstractToolHandler, ToolContracts
 export contract_json, parse_contract, supports_capability, require_model_capability, capability_set
 
 export ArtifactRef,

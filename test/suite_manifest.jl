@@ -36,4 +36,5 @@ const SUITE_MANIFEST = (
     (file = "test_quiet_model_switching.jl", tier = :cpu),
     (file = "test_sandbox_layout.jl", tier = :sandbox),
     (file = "test_syntax.jl", tier = :cpu),
+    (file = "test_tool_contracts.jl", tier = :cpu),
 )
