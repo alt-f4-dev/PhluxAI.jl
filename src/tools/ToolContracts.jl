@@ -85,7 +85,7 @@ contract_payload(x::ToolHandlerDeclaration) = (
     schema_version = ResearchContracts.CONTRACT_SCHEMA_VERSION, kind = "ToolHandlerDeclaration",
     handler_id = x.handler_id,
     spec = (name = x.spec.name, description = x.spec.description, parameters_json = x.spec.parameters_json),
-    risk = String(Symbol(x.risk)), policy = contract_payload(x.policy),
+    risk = string(x.risk), policy = contract_payload(x.policy),
 )
 
 function from_contract(::Type{ExecutionPolicy}, object)::ExecutionPolicy

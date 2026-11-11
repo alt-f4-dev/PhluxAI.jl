@@ -2,6 +2,8 @@ using Test
 using JSON3
 using PhluxAI
 
+struct ReadOnlyToolContractStub <: AbstractToolHandler end
+
 @testset "Tool-handler and execution-policy contracts (CPU only)" begin
     @testset "Safe defaults and validation" begin
         policy = ExecutionPolicy()
@@ -62,8 +64,7 @@ using PhluxAI
     end
 
     @testset "No execution handler activated by Stage 2" begin
-        struct ReadOnlyStub <: AbstractToolHandler end
-        @test_throws MethodError PhluxAI.ToolContracts.tool_declaration(ReadOnlyStub())
+        @test_throws MethodError PhluxAI.ToolContracts.tool_declaration(ReadOnlyToolContractStub())
         @test !isdefined(PhluxAI.ToolContracts, :execute_handler!)
         @test length(PhluxAI.JupyTools.default_registry().tools) == 7
     end
