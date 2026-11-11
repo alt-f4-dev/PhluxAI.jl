@@ -273,7 +273,9 @@ function from_contract(::Type{ModelDescriptor}, obj)::ModelDescriptor
 end
 
 """Decode a supported versioned metadata contract; unknown fields and versions are rejected."""
-parse_contract(::Type{T}, json::AbstractString)::T where {T} = from_contract(T, _parse_object(json))
+function parse_contract(::Type{T}, json::AbstractString) where {T}
+    return from_contract(T, _parse_object(json))
+end
 
 export SourceRef, EvidenceRef, OperationRecord, ModelRef, ModelCapabilitySet, ModelDescriptor
 export contract_payload, contract_json, parse_contract, from_contract, supports_capability, require_model_capability, capability_set
