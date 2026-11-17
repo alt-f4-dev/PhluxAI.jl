@@ -953,8 +953,8 @@ Behavior:
 
 - `TOOLS_OFF` does not expose tools to the model.
 - `TOOLS_ASK` requires an approval callback for every tool.
-- `TOOLS_AUTO` automatically approves non-network tools.
-- Network-capable package installation always requires explicit approval.
+- `TOOLS_AUTO` automatically approves tools classified as `TOOL_READ`.
+- Write, execute, and network tools require an explicit approval callback in both `TOOLS_ASK` and `TOOLS_AUTO`.
 
 ### Programmatic approval callback
 
@@ -1034,7 +1034,7 @@ back to local execution unless `allow_unsafe_local=true`.
 Explicit local execution:
 
 ```julia
-session = ModelSession("gpt-oss:20b"; tool_mode = TOOLS_ASK, sandbox_backend = SANDBOX_LOCAL, allow_unsafe_local = true)
+session = ModelSession("gpt-oss:20b"; tool_mode = TOOLS_ASK, sandbox_backend = SANDBOX_LOCAL, sandbox_network = true, allow_unsafe_local = true)
 ```
 
 `SANDBOX_LOCAL` constrains paths and uses a session-local home and Julia depot,
@@ -1439,8 +1439,7 @@ end
 - A workflow may be stored anywhere. Commit only small reference workflows that
   are intentionally part of project examples or tests.
 - Tool execution is disabled by default.
-- `TOOLS_AUTO` does not automatically approve network-capable package
-  installation.
+- `TOOLS_AUTO` requires explicit approval for workspace writes, Julia execution, and network-capable package installation.
 - Keep sandbox networking disabled unless a specific task requires it.
 - Prefer `SANDBOX_BWRAP` or `SANDBOX_AUTO` on Linux.
 - `SANDBOX_LOCAL` is not a security boundary.
@@ -1451,3 +1450,5 @@ end
 - Programmatic pending attachments are not added implicitly; construct a
   `ModelInput` with the desired artifacts.
 - Call `close` in a `finally` block for programmatic sessions.
+
+The subprocess output budget is shared between stdout and stderr. Exceeding it stops the launcher and reports `output_limit_exceeded`. The deadline includes waiting for the output streams to close.

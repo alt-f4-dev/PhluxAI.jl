@@ -72,7 +72,11 @@ struct ProcessResult
     stderr::String
     started_at::DateTime
     elapsed_seconds::Float64
+    output_limited::Bool
 end
+
+ProcessResult(command, success, timed_out, exit_code, stdout, stderr, started_at, elapsed_seconds) =
+    ProcessResult(command, success, timed_out, exit_code, stdout, stderr, started_at, elapsed_seconds, false)
 
 function _within(root::String, path::String)::Bool
     relative = relpath(path, root)
@@ -175,7 +179,8 @@ end
 function _bwrap_command(
     config::SandboxConfig,
     arguments::Vector{String},
-    working_directory::String,
+    working_directory::String;
+    source_mounts::Union{Nothing,Dict{String,String}} = nothing,
 )::Cmd
     executable = Sys.which("bwrap")
     isnothing(executable) && throw(ArgumentError(
@@ -239,6 +244,18 @@ function _bwrap_command(
 
     config.network || append!(command, ["--unshare-net"])
 
+    if source_mounts !== nothing
+        # Policy workers receive private scratch, the system runtime, and the exact staged inputs.
+        append!(command, ["--unshare-user", "--disable-userns", "--cap-drop", "ALL", "--tmpfs", "/usr/local",
+                          "--setenv", "PATH", "/usr/bin:/bin", "--setenv", "JULIA_DEPOT_PATH", "/workspace/.julia_depot",
+                          "--dir", "/inputs"])
+        for (id, path) in source_mounts
+            append!(command, ["--ro-bind", path, "/inputs/$id"])
+        end
+        append!(command, ["--", arguments...])
+        return Cmd(command)
+    end
+
     created = Set{String}(["/home"])
     for path in _home_mounts(config)
         startswith(path, "/home/") || continue
@@ -276,25 +293,27 @@ function _local_command(
     for (key, value) in config.environment
         env[key] = value
     end
-    return Cmd(arguments; dir = working_directory, env = env)
+    return Cmd(Cmd(arguments); dir = working_directory, env)
 end
 
-function _truncate(bytes::Vector{UInt8}, limit::Int)::String
-    length(bytes) <= limit && return String(bytes)
-    suffix = "\n[output truncated to $limit bytes]\n"
-    return String(bytes[1:limit]) * suffix
+function _capture_output(stream::IO, output::IOBuffer, remaining::Ref{Int}, limited::Ref{Bool})::Nothing
+    chunk = Vector{UInt8}(undef, 8192)
+    while !limited[] && !eof(stream)
+        # Read buffered bytes so both capture tasks share the budget without yielding inside the update.
+        count = readbytes!(stream, chunk, min(length(chunk), bytesavailable(stream)))
+        retained = min(count, remaining[])
+        write(output, view(chunk, 1:retained))
+        remaining[] -= retained
+        limited[] |= retained < count
+        yield()
+    end
+    return nothing
 end
 
-function _wait_for_process(
-    process::Base.Process,
-    timeout_seconds::Float64,
-)::Bool
-    status = timedwait(
-        () -> process_exited(process),
-        timeout_seconds;
-        pollint = 0.05,
-    )
-    return status == :timed_out
+function _output_text(buffer::IOBuffer)::String
+    text = String(take!(buffer))
+    # An output limit can split a multibyte character. Replacement preserves the byte budget.
+    return isvalid(text) ? text : map(c -> isvalid(c) ? c : '?', text)
 end
 
 """Run an argv vector inside the configured sandbox."""
@@ -311,53 +330,48 @@ function run_sandboxed(
         _bwrap_command(config, argv, working_directory) :
         _local_command(config, argv, working_directory)
 
-    stdout_path = tempname(config.workspace)
-    stderr_path = tempname(config.workspace)
+    return _run_command(config, argv, command)
+end
+
+function _run_command(config::SandboxConfig, argv::Vector{String}, command::Cmd)::ProcessResult
+    stdout_pipe, stderr_pipe = Pipe(), Pipe()
+    stdout_buffer, stderr_buffer = IOBuffer(), IOBuffer()
+    remaining = Ref(config.max_output_bytes)
+    limited = Ref(false)
     started_at = now(UTC)
     started_ns = time_ns()
     process = nothing
-    timed_out = false
-
+    readers = ()
+    status = :ok
     try
-        open(stdout_path, "w") do stdout_io
-            open(stderr_path, "w") do stderr_io
-                process = run(
-                    pipeline(command; stdout = stdout_io, stderr = stderr_io);
-                    wait = false,
-                )
-                timed_out = _wait_for_process(
-                    process,
-                    config.timeout_seconds,
-                )
-                if timed_out
-                    try
-                        kill(process)
-                    catch
-                    end
-                end
-                wait(process)
-            end
-        end
-
-        stdout = _truncate(read(stdout_path), config.max_output_bytes)
-        stderr = _truncate(read(stderr_path), config.max_output_bytes)
-        exit_code = process.exitcode < 0 ? nothing : process.exitcode
-        succeeded = !timed_out && success(process)
-        elapsed = (time_ns() - started_ns) / 1.0e9
-        return ProcessResult(
-            argv,
-            succeeded,
-            timed_out,
-            exit_code,
-            stdout,
-            stderr,
-            started_at,
-            elapsed,
-        )
+        process = run(pipeline(command; stdin = devnull, stdout = stdout_pipe, stderr = stderr_pipe); wait = false)
+        close(stdout_pipe.in)
+        close(stderr_pipe.in)
+        stdout_reader = @async _capture_output(stdout_pipe.out, stdout_buffer, remaining, limited)
+        stderr_reader = @async _capture_output(stderr_pipe.out, stderr_buffer, remaining, limited)
+        readers = (stdout_reader, stderr_reader)
+        # EOF is part of completion because descendants may hold pipes open after the launcher exits.
+        done() = limited[] || any(istaskfailed, readers) || (process_exited(process) && all(istaskdone, readers))
+        time_left = max(0.0, config.timeout_seconds - (time_ns() - started_ns) / 1.0e9)
+        status = timedwait(done, time_left; pollint = 0.01)
     finally
-        isfile(stdout_path) && rm(stdout_path; force = true)
-        isfile(stderr_path) && rm(stderr_path; force = true)
+        try
+            if !isnothing(process) && !process_exited(process)
+                kill(process, Base.SIGKILL)
+            end
+        finally
+            close(stdout_pipe)
+            close(stderr_pipe)
+            isnothing(process) || wait(process)
+        end
     end
+    foreach(fetch, readers)
+    timed_out = status == :timed_out
+    exit_code = process.exitcode < 0 || process.termsignal != 0 ? nothing : process.exitcode
+    succeeded = !timed_out && !limited[] && success(process)
+    elapsed = (time_ns() - started_ns) / 1.0e9
+    return ProcessResult(argv, succeeded, timed_out, exit_code, _output_text(stdout_buffer), _output_text(stderr_buffer),
+                         started_at, elapsed, limited[])
 end
 
 export SandboxBackend,

@@ -1,9 +1,10 @@
-name: CPU regression tests
+name: Regression and sandbox tests
 
 on:
   push:
     branches: [main, PhluxAI-dev]
   pull_request:
+  workflow_dispatch:
 
 jobs:
   cpu-regressions:
@@ -30,3 +31,70 @@ jobs:
         run: julia --project=. --startup-file=no -e 'using Pkg; Pkg.instantiate()'
       - name: Run isolated CPU and mock-HTTP regressions
         run: julia --project=. --startup-file=no test/runtests.jl
+
+  sandbox-integration:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    timeout-minutes: 20
+    env:
+      PHLUXAI_TEST_PROFILE: 'sandbox'
+      PHLUXAI_BANNER: '0'
+      PHLUXAI_COMFY_AUTOSTART: '0'
+      PHLUXAI_SKIP_OLLAMA_INSTALL: '1'
+      PHLUXAI_SKIP_COMFY_INSTALL: '1'
+      RESEAU_PRECOMPILE_ONLY: 'eventloops,internal_poll,socket_ops,tcp,host_resolvers'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.13'
+      - uses: julia-actions/cache@v2
+      - name: Install and probe Bubblewrap
+        shell: bash
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y bubblewrap
+          probe() {
+              bwrap --unshare-user --disable-userns --unshare-net --unshare-pid --cap-drop ALL \
+                  --ro-bind /usr /usr --ro-bind-try /lib64 /lib64 --ro-bind-try /lib /lib \
+                  --proc /proc -- /usr/bin/true
+          }
+          if ! probe; then
+              profile=$(mktemp)
+              cat > "$profile" <<'APPARMOR'
+          abi <abi/4.0>,
+          include <tunables/global>
+          profile phluxai-ci-bwrap /usr/bin/bwrap flags=(unconfined) {
+              userns,
+          }
+          APPARMOR
+              sudo apparmor_parser -a "$profile"
+              rm "$profile"
+              probe
+          fi
+      - name: Instantiate environment
+        run: julia --project=. --startup-file=no -e 'using Pkg; Pkg.instantiate()'
+      - name: Run sandbox tests as the runner user in a delegated cgroup
+        shell: bash
+        run: |
+          sudo --preserve-env=PHLUXAI_TEST_PROFILE,PHLUXAI_BANNER,PHLUXAI_COMFY_AUTOSTART,PHLUXAI_SKIP_OLLAMA_INSTALL,PHLUXAI_SKIP_COMFY_INSTALL,RESEAU_PRECOMPILE_ONLY bash -euo pipefail -c '
+              root=/sys/fs/cgroup
+              grep -qw memory "$root/cgroup.controllers"
+              if ! grep -qw memory "$root/cgroup.subtree_control"; then
+                  printf "+memory\n" > "$root/cgroup.subtree_control"
+              fi
+              delegated=$(mktemp -d "$root/phluxai-ci-XXXXXX")
+              trap '\''rmdir "$delegated/runner" "$delegated"'\'' EXIT
+              printf "+memory\n" > "$delegated/cgroup.subtree_control"
+              mkdir "$delegated/runner"
+              chown "$1:$2" "$delegated" "$delegated/cgroup.procs"
+              export PHLUXAI_WORKER_CGROUP="$delegated"
+              (
+                  printf "%s\n" "$BASHPID" > "$delegated/runner/cgroup.procs"
+                  exec sudo -u "$1" --preserve-env=PHLUXAI_WORKER_CGROUP,PHLUXAI_TEST_PROFILE,PHLUXAI_BANNER,PHLUXAI_COMFY_AUTOSTART,PHLUXAI_SKIP_OLLAMA_INSTALL,PHLUXAI_SKIP_COMFY_INSTALL,RESEAU_PRECOMPILE_ONLY \
+                      "$3" --project=. --startup-file=no test/runtests.jl
+              )
+          ' _ "$(id -un)" "$(id -gn)" "$(command -v julia)"

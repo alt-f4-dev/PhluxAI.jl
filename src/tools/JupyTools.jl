@@ -5,6 +5,9 @@ using JSON3
 import ..ArtifactStore
 import ..ProtocolTypes: ArtifactRef, ToolCall, ToolExecution, ToolSpec
 import ..Sandboxing
+import ..PolicyWorkers: SourceGrant, run_worker, source_ids
+import ..ToolContracts: AbstractToolHandler, ToolHandlerDeclaration, tool_declaration
+import ..ToolContracts: ToolRisk, TOOL_READ, TOOL_WRITE, TOOL_EXECUTE, TOOL_NETWORK
 
 @enum ToolMode begin
     TOOLS_OFF
@@ -12,43 +15,55 @@ import ..Sandboxing
     TOOLS_AUTO
 end
 
-@enum ToolRisk begin
-    TOOL_READ
-    TOOL_WRITE
-    TOOL_EXECUTE
-    TOOL_NETWORK
-end
-
-struct RegisteredTool
+struct RegisteredTool{F<:Union{Function,Nothing}}
     spec::ToolSpec
     risk::ToolRisk
+    handler::F
 end
+
+RegisteredTool(spec::ToolSpec, risk::ToolRisk) = RegisteredTool(spec, risk, nothing)
+
+struct PolicyTool{H<:AbstractToolHandler}
+    declaration::ToolHandlerDeclaration
+    handler::H
+end
+
+_spec(tool::RegisteredTool) = tool.spec
+_spec(tool::PolicyTool) = tool.declaration.spec
+_risk(tool::RegisteredTool) = tool.risk
+_risk(tool::PolicyTool) = tool.declaration.risk
 
 struct ToolRegistry
-    tools::Dict{String,RegisteredTool}
+    tools::Dict{String,Union{RegisteredTool,PolicyTool}}
+    policy_only::Bool
 end
 
-ToolRegistry() = ToolRegistry(Dict{String,RegisteredTool}())
+ToolRegistry(; policy_only::Bool = false) = ToolRegistry(Dict{String,Union{RegisteredTool,PolicyTool}}(), policy_only)
+ToolRegistry(tools::AbstractDict{String,<:RegisteredTool}) = ToolRegistry(Dict{String,Union{RegisteredTool,PolicyTool}}(tools), false)
 
-function register!(
-    registry::ToolRegistry,
-    tool::RegisteredTool,
-)::ToolRegistry
+function register!(registry::ToolRegistry, tool::RegisteredTool)::ToolRegistry
+    registry.policy_only && throw(ArgumentError("policy-only registries accept declared handlers"))
     registry.tools[tool.spec.name] = tool
+    return registry
+end
+
+function register!(registry::ToolRegistry, handler::AbstractToolHandler)::ToolRegistry
+    registry.policy_only || throw(ArgumentError("declared handlers require a policy-only registry"))
+    declaration = tool_declaration(handler)
+    name = declaration.spec.name
+    haskey(registry.tools, name) && throw(ArgumentError("a tool is already registered with that name"))
+    registry.tools[name] = PolicyTool(declaration, handler)
     return registry
 end
 
 function tool_specs(registry::ToolRegistry)::Vector{ToolSpec}
     names = sort!(collect(keys(registry.tools)))
-    return ToolSpec[registry.tools[name].spec for name in names]
+    return ToolSpec[_spec(registry.tools[name]) for name in names]
 end
 
-function tool_risk(
-    registry::ToolRegistry,
-    name::AbstractString,
-)::Union{ToolRisk,Nothing}
+function tool_risk(registry::ToolRegistry, name::AbstractString)::Union{ToolRisk,Nothing}
     tool = get(registry.tools, String(name), nothing)
-    return isnothing(tool) ? nothing : tool.risk
+    return isnothing(tool) ? nothing : _risk(tool)
 end
 
 mutable struct ToolContext
@@ -57,7 +72,11 @@ mutable struct ToolContext
     registry::ToolRegistry
     jupy_executable::String
     jupip_executable::String
+    worker_cgroup::Union{Nothing,String}
+    authorize_sources::Union{Nothing,Function}
 end
+
+ToolContext(sandbox, artifacts, registry, jupy, jupip) = ToolContext(sandbox, artifacts, registry, jupy, jupip, nothing, nothing)
 
 function _executable(name::String)::String
     path = Sys.which(name)
@@ -73,10 +92,16 @@ function ToolContext(
     registry::ToolRegistry = default_registry(),
     jupy_executable::Union{AbstractString,Nothing} = nothing,
     jupip_executable::Union{AbstractString,Nothing} = nothing,
+    worker_cgroup::Union{AbstractString,Nothing} = nothing,
+    authorize_sources::Union{Function,Nothing} = nothing,
 )::ToolContext
-    jupy = isnothing(jupy_executable) ? _executable("jupy") : String(jupy_executable)
-    jupip = isnothing(jupip_executable) ? _executable("jupip") : String(jupip_executable)
-    return ToolContext(sandbox, artifacts, registry, jupy, jupip)
+    jupy = jupip = ""
+    if !registry.policy_only
+        jupy = isnothing(jupy_executable) ? _executable("jupy") : String(jupy_executable)
+        jupip = isnothing(jupip_executable) ? _executable("jupip") : String(jupip_executable)
+    end
+    group = isnothing(worker_cgroup) ? nothing : abspath(worker_cgroup)
+    return ToolContext(sandbox, artifacts, registry, jupy, jupip, group, authorize_sources)
 end
 
 function _schema(value)::String
@@ -84,6 +109,7 @@ function _schema(value)::String
 end
 
 function _tool(
+    handler::Function,
     name::String,
     description::String,
     properties::Dict{String,Any};
@@ -96,12 +122,13 @@ function _tool(
         "additionalProperties" => false,
     )
     isempty(required) || (parameters["required"] = required)
-    return RegisteredTool(ToolSpec(name, description, _schema(parameters)), risk)
+    return RegisteredTool(ToolSpec(name, description, _schema(parameters)), risk, handler)
 end
 
 function default_registry()::ToolRegistry
     registry = ToolRegistry()
     register!(registry, _tool(
+        _execute_write,
         "write_text_file",
         "Write UTF-8 text to a relative path in the sandbox workspace.",
         Dict{String,Any}(
@@ -122,6 +149,7 @@ function default_registry()::ToolRegistry
         risk = TOOL_WRITE,
     ))
     register!(registry, _tool(
+        _execute_read,
         "read_text_file",
         "Read a UTF-8 text file from the sandbox workspace.",
         Dict{String,Any}(
@@ -135,6 +163,7 @@ function default_registry()::ToolRegistry
         risk = TOOL_READ,
     ))
     register!(registry, _tool(
+        _execute_list,
         "list_files",
         "List files under a relative sandbox workspace directory.",
         Dict{String,Any}(
@@ -144,6 +173,7 @@ function default_registry()::ToolRegistry
         risk = TOOL_READ,
     ))
     register!(registry, _tool(
+        _execute_julia,
         "run_julia_script",
         "Run a Julia script through jupy in the sandbox. Optionally collect " *
         "specified output files as artifacts.",
@@ -166,6 +196,7 @@ function default_registry()::ToolRegistry
         risk = TOOL_EXECUTE,
     ))
     register!(registry, _tool(
+        _execute_install,
         "install_python_packages",
         "Install Python packages with jupip in the sandbox project.",
         Dict{String,Any}(
@@ -179,6 +210,7 @@ function default_registry()::ToolRegistry
         risk = TOOL_NETWORK,
     ))
     register!(registry, _tool(
+        _execute_inspect,
         "inspect_python_package",
         "Inspect one Python package with jupip show.",
         Dict{String,Any}(
@@ -188,6 +220,7 @@ function default_registry()::ToolRegistry
         risk = TOOL_READ,
     ))
     register!(registry, _tool(
+        _execute_collect,
         "collect_artifacts",
         "Copy workspace files into the session artifact store.",
         Dict{String,Any}(
@@ -203,15 +236,17 @@ function default_registry()::ToolRegistry
     return registry
 end
 
-function _parse_arguments(call::ToolCall)
-    try
-        return JSON3.read(call.arguments_json)
+function _parse_arguments(call::ToolCall)::JSON3.Object
+    arguments = try
+        JSON3.read(call.arguments_json)
     catch error
         throw(ArgumentError(
             "invalid JSON arguments for tool $(call.name): " *
             sprint(showerror, error),
         ))
     end
+    arguments isa JSON3.Object || throw(ArgumentError("tool arguments must be a JSON object"))
+    return arguments
 end
 
 function _string_argument(
@@ -270,6 +305,7 @@ function _format_process(result::Sandboxing.ProcessResult)::String
     buffer = IOBuffer()
     println(buffer, "success: ", result.success)
     println(buffer, "timed_out: ", result.timed_out)
+    result.output_limited && println(buffer, "output_limit_exceeded: true")
     println(buffer, "exit_code: ", something(result.exit_code, "unknown"))
     println(
         buffer,
@@ -511,76 +547,69 @@ function _execute_collect(
     )
 end
 
-function _execute_registered(
-    context::ToolContext,
-    call::ToolCall,
-    arguments,
-)::ToolExecution
-    call.name == "write_text_file" &&
-        return _execute_write(context, call, arguments)
-    call.name == "read_text_file" &&
-        return _execute_read(context, call, arguments)
-    call.name == "list_files" &&
-        return _execute_list(context, call, arguments)
-    call.name == "run_julia_script" &&
-        return _execute_julia(context, call, arguments)
-    call.name == "install_python_packages" &&
-        return _execute_install(context, call, arguments)
-    call.name == "inspect_python_package" &&
-        return _execute_inspect(context, call, arguments)
-    call.name == "collect_artifacts" &&
-        return _execute_collect(context, call, arguments)
-    throw(ArgumentError("unknown tool '$(call.name)'"))
+function _handler(tool::RegisteredTool{Nothing})
+    builtin = get(default_registry().tools, tool.spec.name, nothing)
+    isnothing(builtin) && throw(ArgumentError("tool has no registered handler"))
+    builtin.risk == tool.risk || throw(ArgumentError("registered risk does not match the built-in handler"))
+    return builtin.handler
 end
 
-function _approved(
-    mode::ToolMode,
-    tool::RegisteredTool,
-    call::ToolCall,
-    approval_callback::Union{Nothing,Function},
-)::Bool
-    mode == TOOLS_OFF && return false
-    if mode == TOOLS_AUTO && tool.risk != TOOL_NETWORK
-        return true
-    end
+_handler(tool::RegisteredTool) = tool.handler
+_requires_approval(tool::RegisteredTool) = tool.risk != TOOL_READ
+_requires_approval(tool::PolicyTool) = tool.declaration.policy.approval == :required
 
-    # Network-capable package installation always requires an explicit
-    # approval callback, including in automatic tool mode.
+function _approved(mode::ToolMode, tool, call::ToolCall, approval_callback::Union{Nothing,Function})::Bool
+    mode == TOOLS_AUTO && !_requires_approval(tool) && return true
     isnothing(approval_callback) && return false
-    return Bool(approval_callback(call, tool.risk))
+    return try
+        approval_callback(call, _risk(tool)) === true
+    catch error
+        error isa InterruptException && rethrow()
+        false
+    end
+end
+
+function _dispatch(context::ToolContext, tool::RegisteredTool, call::ToolCall, arguments)::ToolExecution
+    return _handler(tool)(context, call, arguments)
+end
+
+function _dispatch(context::ToolContext, tool::PolicyTool, call::ToolCall, arguments)::ToolExecution
+    ids = source_ids(arguments)
+    grants = Dict{String,SourceGrant}()
+    if !isempty(ids)
+        authorize = context.authorize_sources
+        authorize === nothing && throw(ArgumentError("source access was not authorized"))
+        allowed = authorize(call, tool.declaration)
+        allowed isa AbstractDict || throw(ArgumentError("source access was not authorized"))
+        for id in ids
+            grant = get(allowed, id, nothing)
+            grant isa SourceGrant || throw(ArgumentError("source access was not authorized"))
+            grants[id] = grant
+        end
+    end
+    result, memory_exceeded, oom_killed = run_worker(tool.handler, arguments, grants, ids, tool.declaration.policy,
+                                                     context.sandbox, context.worker_cgroup)
+    output = _format_process(result)
+    memory_exceeded && (output = "memory_limit_exceeded: true\n" * output)
+    oom_killed && (output = "worker_oom_killed: true\n" * output)
+    return ToolExecution(call.id, call.name, result.success && !memory_exceeded, output; exit_code = result.exit_code)
 end
 
 """Validate, authorize, and execute one model-requested tool call."""
-function execute_tool_call(
-    context::ToolContext,
-    call::ToolCall;
-    mode::ToolMode = TOOLS_ASK,
-    approval_callback::Union{Nothing,Function} = nothing,
-)::ToolExecution
+function execute_tool_call(context::ToolContext, call::ToolCall; mode::ToolMode = TOOLS_ASK,
+                           approval_callback::Union{Nothing,Function} = nothing)::ToolExecution
     tool = get(context.registry.tools, call.name, nothing)
-    isnothing(tool) && return ToolExecution(
-        call.id,
-        call.name,
-        false,
-        "tool is not registered",
-    )
-    _approved(mode, tool, call, approval_callback) ||
-        return ToolExecution(
-            call.id,
-            call.name,
-            false,
-            "tool execution was not approved",
-        )
+    (isnothing(tool) || _spec(tool).name != call.name || context.registry.policy_only != (tool isa PolicyTool)) &&
+        return ToolExecution(call.id, call.name, false, "tool is not registered")
+    mode == TOOLS_OFF && return ToolExecution(call.id, call.name, false, "tool execution was not approved")
     try
         arguments = _parse_arguments(call)
-        return _execute_registered(context, call, arguments)
+        _approved(mode, tool, call, approval_callback) ||
+            return ToolExecution(call.id, call.name, false, "tool execution was not approved")
+        return _dispatch(context, tool, call, arguments)
     catch error
-        return ToolExecution(
-            call.id,
-            call.name,
-            false,
-            sprint(showerror, error),
-        )
+        error isa InterruptException && rethrow()
+        return ToolExecution(call.id, call.name, false, sprint(showerror, error))
     end
 end
 

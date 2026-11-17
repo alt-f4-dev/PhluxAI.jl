@@ -34,7 +34,10 @@ const SUITE_MANIFEST = (
     (file = "test_phase3_final_integration.jl", tier = :live),
     (file = "test_research_contracts.jl", tier = :cpu),
     (file = "test_quiet_model_switching.jl", tier = :cpu),
+    (file = "test_sandbox_capture.jl", tier = :cpu),
     (file = "test_sandbox_layout.jl", tier = :sandbox),
+    (file = "test_sandbox_policy.jl", tier = :sandbox),
     (file = "test_syntax.jl", tier = :cpu),
     (file = "test_tool_contracts.jl", tier = :cpu),
+    (file = "test_tool_dispatch.jl", tier = :cpu),
 )

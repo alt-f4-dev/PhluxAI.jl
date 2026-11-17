@@ -3,11 +3,16 @@ module ToolContracts
 using JSON3
 
 import ..ProtocolTypes: ToolSpec
-import ..JupyTools: ToolRisk, TOOL_READ, TOOL_WRITE, TOOL_EXECUTE, TOOL_NETWORK
+@enum ToolRisk begin
+    TOOL_READ
+    TOOL_WRITE
+    TOOL_EXECUTE
+    TOOL_NETWORK
+end
 import ..ResearchContracts
 import ..ResearchContracts: contract_payload, from_contract
 
-"""Metadata-only resource and approval requirements. Enforcement belongs to the Stage 3 executor."""
+"""Resource, isolation, and approval requirements for a declared tool."""
 struct ExecutionPolicy
     isolation::Symbol
     approval::Symbol
@@ -39,7 +44,7 @@ struct ExecutionPolicy
     end
 end
 
-"""Descriptive contract for a future registered handler; no executable callable is stored or invoked."""
+"""Stable identity, model-facing schema, and policy for a registered handler."""
 struct ToolHandlerDeclaration
     handler_id::String
     spec::ToolSpec
@@ -67,12 +72,15 @@ struct ToolHandlerDeclaration
     end
 end
 
-"""Third-party implementers may provide a declaration; Stage 3 will define execution dispatch."""
+"""A trusted host adapter that declares a tool and builds its worker command."""
 abstract type AbstractToolHandler end
 
 function tool_declaration(handler::AbstractToolHandler)::ToolHandlerDeclaration
     throw(MethodError(tool_declaration, (handler,)))
 end
+
+"""Return worker argv. Source values are read-only sandbox paths keyed by granted source ID."""
+function tool_command end
 
 contract_payload(x::ExecutionPolicy) = (
     schema_version = ResearchContracts.CONTRACT_SCHEMA_VERSION, kind = "ExecutionPolicy",
@@ -129,6 +137,6 @@ function from_contract(::Type{ToolHandlerDeclaration}, object)::ToolHandlerDecla
     return ToolHandlerDeclaration(ResearchContracts._string(object, "handler_id"), spec, risk; policy)
 end
 
-export ExecutionPolicy, ToolHandlerDeclaration, AbstractToolHandler, tool_declaration
+export ExecutionPolicy, ToolHandlerDeclaration, AbstractToolHandler, tool_declaration, tool_command
 
 end # module ToolContracts
