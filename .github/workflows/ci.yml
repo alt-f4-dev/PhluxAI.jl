@@ -106,6 +106,12 @@ jobs:
               rm "$profile"
               probe
           fi
+          # Probe imports in the worker filesystem, rather than the host Python environment.
+          bwrap --unshare-user --disable-userns --unshare-net --unshare-pid --cap-drop ALL --clearenv \
+              --ro-bind /usr /usr --tmpfs /usr/local --ro-bind-try /lib64 /lib64 --ro-bind-try /lib /lib \
+              --ro-bind-try /etc/ld.so.cache /etc/ld.so.cache --proc /proc --dev /dev --tmpfs /tmp \
+              --setenv PATH /usr/bin:/bin -- /usr/bin/python3 -I -c \
+              'import pdfplumber; import h5py; import numpy; print(pdfplumber.__version__, h5py.__version__, numpy.__version__)'
       - name: Instantiate environment
         run: julia --project=. --startup-file=no -e 'using Pkg; Pkg.instantiate()'
       - name: Run sandbox tests as the runner user in a delegated cgroup
