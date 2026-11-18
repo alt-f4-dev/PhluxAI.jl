@@ -1,0 +1,4 @@
+# Binary wheels keep BLAS and HDF5 dependencies within the read-only /usr runtime.
+numpy==2.3.5
+h5py==3.16.0
+pdfplumber==0.11.9
