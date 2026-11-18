@@ -4,7 +4,7 @@ PhluxAI provides content-addressed source snapshots, eight registered analysis o
 
 ## Runtime
 
-The host application uses Julia and the package's existing dependencies. Workers use system Python with `h5py`, NumPy, `pdfplumber`, and PDFMiner. OCR uses Poppler and Tesseract with English language data. On Ubuntu, install `python3-h5py python3-pdfplumber poppler-utils tesseract-ocr` through apt. The test fixtures additionally require `python3-reportlab`, Pillow, and DejaVu Sans.
+The host application uses Julia and the package's existing dependencies. Workers use system Python with `h5py`, NumPy, `pdfplumber`, and PDFMiner. OCR uses Poppler and Tesseract with English language data. On Ubuntu 24.04, install `python3-h5py python3-pip poppler-utils tesseract-ocr` through apt. The CI runner additionally installs `pdfplumber==0.11.9` and its dependencies with `/usr/bin/python3 -m pip install --break-system-packages --target /usr/lib/python3/dist-packages pdfplumber==0.11.9` into its disposable system runtime; Ubuntu 24.04 does not package `python3-pdfplumber`. For deployment, provision these dependencies in a dedicated system runtime image. The test fixtures additionally require `python3-reportlab`, Pillow, and DejaVu Sans.
 
 The default worker interpreter is `/usr/bin/python3`. Dependencies must be accessible through the sandbox's system runtime. The declared-worker mount layout hides `/usr/local` and host home directories. Installing Python packages only into a host virtual environment does not make them available inside the sandbox.
 

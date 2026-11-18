@@ -51,7 +51,9 @@ jobs:
       - name: Install parser and fixture dependencies
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y python3-h5py python3-pdfplumber python3-reportlab poppler-utils tesseract-ocr fonts-dejavu-core
+          sudo apt-get install -y python3-h5py python3-pip python3-reportlab poppler-utils tesseract-ocr fonts-dejavu-core
+          # Install into the system path visible inside the read-only /usr mount.
+          sudo /usr/bin/python3 -m pip install --break-system-packages --target /usr/lib/python3/dist-packages pdfplumber==0.11.9
       - name: Validate parser operations and failure cases
         run: /usr/bin/python3 -m unittest discover -s test/analysis -p test_worker.py -v
       - name: Instantiate environment
@@ -83,7 +85,9 @@ jobs:
         shell: bash
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y bubblewrap python3-h5py python3-pdfplumber python3-reportlab poppler-utils tesseract-ocr fonts-dejavu-core
+          sudo apt-get install -y bubblewrap python3-h5py python3-pip python3-reportlab poppler-utils tesseract-ocr fonts-dejavu-core
+          # Install into the system path visible inside the read-only /usr mount.
+          sudo /usr/bin/python3 -m pip install --break-system-packages --target /usr/lib/python3/dist-packages pdfplumber==0.11.9
           probe() {
               bwrap --unshare-user --disable-userns --unshare-net --unshare-pid --cap-drop ALL \
                   --ro-bind /usr /usr --ro-bind-try /lib64 /lib64 --ro-bind-try /lib /lib \
