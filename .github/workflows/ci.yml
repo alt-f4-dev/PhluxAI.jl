@@ -16,6 +16,7 @@ jobs:
         julia-version: ['1.12', '1.13']
     env:
       PHLUXAI_TEST_PROFILE: 'cpu'
+      JULIA_NUM_THREADS: '4'
       PHLUXAI_BANNER: '0'
       PHLUXAI_COMFY_AUTOSTART: '0'
       PHLUXAI_SKIP_OLLAMA_INSTALL: '1'

@@ -3,6 +3,9 @@ module OllamaClient
 using Dates
 using HTTP
 using JSON3
+using SHA
+using UUIDs
+import ..SessionJournals
 
 import ..ArtifactStore
 import ..ImageInterface
@@ -654,6 +657,7 @@ function chat_stream_response(
     print_tokens::Bool = true,
     print_reasoning::Bool = false,
     io::IO = stdout,
+    on_chunk::Union{Function,Nothing} = nothing,
 )::ModelResponse
     payload = _chat_payload(model, messages, artifact_store; temperature, max_tokens, num_ctx, num_thread, keep_alive, thinking, tools, stream = true)
     timeout_keywords = _timeout_keywords(request_timeout, read_idle_timeout)
@@ -675,6 +679,7 @@ function chat_stream_response(
         while !eof(stream_io)
             line = readline(stream_io)
             isempty(line) && continue
+            on_chunk === nothing || on_chunk(line)
             chunk = JSON3.read(line)
             message = get(chunk, :message, nothing)
             if message !== nothing
@@ -1027,6 +1032,9 @@ mutable struct ChatSession
     revision::UInt64
     last_response::Union{ModelResponse,Nothing}
     closed::Bool
+    journal::SessionJournals.SessionJournal
+    journal_state_sha256::String
+    runtime_settings::Dict{String,Any}
 end
 
 function _default_artifact_store(session_dir::Union{String,Nothing})::ArtifactStore.Store
@@ -1046,14 +1054,28 @@ function ChatSession(
     directory = isnothing(session_dir) ? nothing : String(session_dir)
     kind = String(strip(session_type))
     isempty(kind) && throw(ArgumentError("session_type must not be empty"))
-    cold_io = nothing
     if !isnothing(directory)
         isempty(strip(directory)) && throw(ArgumentError("session_dir must not be empty"))
         mkpath(directory)
-        cold_io = open(joinpath(directory, "cold.jsonl"), "a")
+        isfile(joinpath(directory, "journal.jsonl")) && throw(ArgumentError("session already has a journal; use load_session"))
+        isfile(joinpath(directory, "hot.json")) && throw(ArgumentError("legacy session exists; use load_session to migrate"))
     end
-    store = isnothing(artifact_store) ? _default_artifact_store(directory) : artifact_store
-    return ChatSession(model, String(prompt), nothing, String[], ChatMessage[], cfg, nothing, directory, cold_io, kind, store, persist_reasoning, ReentrantLock(), UInt64(0), nothing, false)
+    journal_root = isnothing(directory) ? mktempdir(prefix = "phluxai-journal-") : directory
+    journal = SessionJournals.open_journal(joinpath(journal_root, "journal.jsonl"))
+    cold_io = nothing
+    try
+        cold_io = isnothing(directory) ? nothing : open(joinpath(directory, "cold.jsonl"), "a")
+        store = isnothing(artifact_store) ? _default_artifact_store(directory) : artifact_store
+        session = ChatSession(model, String(prompt), nothing, String[], ChatMessage[], cfg, nothing, directory, cold_io, kind,
+                              store, persist_reasoning, ReentrantLock(), UInt64(0), nothing, false, journal, "", Dict{String,Any}())
+        SessionJournals.append_event!(journal, :session_started, (model = model.name, base_url = model.base_url, session_type = kind))
+        _save_hot_unlocked(session)
+        return session
+    catch
+        cold_io === nothing || close(cold_io)
+        close(journal)
+        rethrow()
+    end
 end
 
 function _require_open_unlocked(session::ChatSession)::Nothing
@@ -1216,12 +1238,26 @@ function _compression_cutoff(messages::Vector{ChatMessage}, keep::Int)::Int
     return cutoff
 end
 
+function _generation_storage(candidate::GenerateResponse)
+    return (model = candidate.model, response = candidate.response, thinking = candidate.thinking,
+            artifacts = _artifact_dict.(candidate.artifacts), done = candidate.done, done_reason = candidate.done_reason,
+            eval_count = candidate.eval_count, prompt_eval_count = candidate.prompt_eval_count,
+            metrics = NamedTuple{fieldnames(ResponseMetrics)}(Tuple(getfield(candidate.metrics, name) for name in fieldnames(ResponseMetrics))))
+end
+
 function _commit_compression_candidate_unlocked!(session::ChatSession, candidate::GenerateResponse, tail::Vector{ChatMessage}, snapshot_revision::UInt64)::Bool
     session.closed && return false
-    session.revision == snapshot_revision || return false
     summary = _validated_summary(candidate)
-    isnothing(summary) && return false
+    if session.revision != snapshot_revision || summary === nothing
+        record_session_event!(session, :summary_rejected, (snapshot_revision, received = _generation_storage(candidate)))
+        return false
+    end
 
+    source_head = SessionJournals.journal_head(session.journal)
+    SessionJournals.append_event!(session.journal, :summary_created,
+        (source_sequence = source_head.sequence, source_sha256 = source_head.sha256, previous_summary = session.summary,
+         input_messages = [_message_storage(message; include_reasoning = false) for message in session.messages[1:max(0, length(session.messages) - length(tail))]],
+         model = session.model.name, settings = _budget_dict(session.cfg), summary, received = _generation_storage(candidate), system_prompt = _SUMMARY_SYSTEM, temperature = 0.2))
     previous_summary = session.summary
     previous_messages = session.messages
     previous_revision = session.revision
@@ -1261,6 +1297,9 @@ function _maybe_compress_unlocked!(session::ChatSession; force::Bool=false)::Not
                 end
             end
         catch error
+            lock(session.lock) do
+                session.closed || record_session_event!(session, :compression_failed, (message = sprint(showerror, error), snapshot_revision))
+            end
             @warn "Async compression failed; original conversation history retained" exception = (error, catch_backtrace(),)
         end
         return nothing
@@ -1303,40 +1342,29 @@ function _run_model_turn_unlocked!(
     print_reasoning::Bool,
     io::IO,
 )::ModelResponse
-    response = if stream
-        chat_stream_response(
-            session.model,
-            _assemble_messages_unlocked(session);
-            artifact_store = session.artifact_store,
-            temperature,
-            max_tokens,
-            num_ctx = session.cfg.num_ctx,
-            num_thread = session.cfg.num_thread,
-            keep_alive,
-            thinking,
-            tools,
-            request_timeout,
-            read_idle_timeout,
-            print_tokens,
-            print_reasoning,
-            io,
-        )
-    else
-        chat_response(
-            session.model,
-            _assemble_messages_unlocked(session);
-            artifact_store = session.artifact_store,
-            temperature,
-            max_tokens,
-            num_ctx = session.cfg.num_ctx,
-            num_thread = session.cfg.num_thread,
-            keep_alive,
-            thinking,
-            tools,
-            request_timeout,
-        )
+    request_id = string(uuid4())
+    record_session_event!(session, :operation_started, (id = request_id, operation = "model_request", model = session.model.name,
+                          temperature, max_tokens, keep_alive, thinking = thinking === nothing ? nothing : string(thinking)))
+    response = try
+        if stream
+            chat_stream_response(session.model, _assemble_messages_unlocked(session); artifact_store = session.artifact_store,
+                                 temperature, max_tokens, num_ctx = session.cfg.num_ctx, num_thread = session.cfg.num_thread,
+                                 keep_alive, thinking, tools, request_timeout, read_idle_timeout, print_tokens, print_reasoning, io,
+                                 on_chunk = line -> record_session_event!(session, :model_chunk, (request_id, raw_json = line)))
+        else
+            chat_response(session.model, _assemble_messages_unlocked(session); artifact_store = session.artifact_store,
+                          temperature, max_tokens, num_ctx = session.cfg.num_ctx, num_thread = session.cfg.num_thread,
+                          keep_alive, thinking, tools, request_timeout)
+        end
+    catch error
+        record_session_event!(session, :operation_finished, (id = request_id, success = false, message = sprint(showerror, error)))
+        rethrow()
     end
-    push!(session.messages, ChatMessage(ROLE_ASSISTANT, response.text; reasoning = response.reasoning, artifacts = response.artifacts, tool_calls = response.tool_calls))
+    record_session_event!(session, :response_received, _response_storage(response))
+    message = ChatMessage(ROLE_ASSISTANT, response.text; reasoning = response.reasoning, artifacts = response.artifacts, tool_calls = response.tool_calls)
+    _log_cold_unlocked(session, message)
+    record_session_event!(session, :operation_finished, (id = request_id, success = true))
+    push!(session.messages, message)
     session.last_response = response
     session.revision += UInt64(1)
     _save_hot_unlocked(session)
@@ -1367,18 +1395,19 @@ function respond!(
         original_length = length(session.messages)
         original_revision = session.revision
         original_response = session.last_response
+        _log_cold_unlocked(session, user_message)
         push!(session.messages, user_message)
         session.revision += UInt64(1)
         response = try
             _run_model_turn_unlocked!(session; temperature, max_tokens, keep_alive, thinking, tools, request_timeout, read_idle_timeout, stream, print_tokens, print_reasoning, io)
-        catch
+        catch error
             resize!(session.messages, original_length)
             session.revision = original_revision
             session.last_response = original_response
+            SessionJournals.append_event!(session.journal, :operation_failed, (operation = "model_request", message = sprint(showerror, error)))
+            _save_hot_unlocked(session)
             rethrow()
         end
-        _log_cold_unlocked(session, user_message)
-        _log_cold_unlocked(session, session.messages[end])
         if finalize
             _drop_transient_reasoning_unlocked!(session)
             _save_hot_unlocked(session)
@@ -1413,13 +1442,14 @@ function continue_response!(
         original_response = session.last_response
         response = try
             _run_model_turn_unlocked!(session;  temperature, max_tokens, keep_alive, thinking, tools, request_timeout, read_idle_timeout, stream, print_tokens, print_reasoning, io)
-        catch
+        catch error
             resize!(session.messages, original_length)
             session.revision = original_revision
             session.last_response = original_response
+            SessionJournals.append_event!(session.journal, :operation_failed, (operation = "model_request", message = sprint(showerror, error)))
+            _save_hot_unlocked(session)
             rethrow()
         end
-        _log_cold_unlocked(session, session.messages[end])
         if finalize
             _drop_transient_reasoning_unlocked!(session)
             _save_hot_unlocked(session)
@@ -1451,23 +1481,30 @@ function generate_images!(session::ChatSession, backend::ImageInterface.Abstract
         original_revision = session.revision
         original_response = session.last_response
         user_message = ChatMessage(ROLE_USER, request.prompt)
+        _log_cold_unlocked(session, user_message)
         push!(session.messages, user_message)
         session.revision += UInt64(1)
+        request_id = string(uuid4())
+        record_session_event!(session, :operation_started, (id = request_id, operation = "image_generation",
+                              request = NamedTuple{fieldnames(typeof(request))}(Tuple(getfield(request, name) for name in fieldnames(typeof(request))))))
         response = try
             ImageInterface.generate_images(backend, request, session.artifact_store)
-        catch
+        catch error
             resize!(session.messages, original_length)
             session.revision = original_revision
             session.last_response = original_response
+            record_session_event!(session, :operation_finished, (id = request_id, success = false, message = sprint(showerror, error)))
+            _save_hot_unlocked(session)
             rethrow()
         end
+        record_session_event!(session, :response_received, _response_storage(response))
         assistant_message = ChatMessage(ROLE_ASSISTANT,
                                         isempty(response.text) ? "Generated $(length(response.artifacts)) image artifact(s)." : response.text; artifacts = response.artifacts)
         push!(session.messages, assistant_message)
         session.last_response = response
         session.revision += UInt64(1)
-        _log_cold_unlocked(session, user_message)
         _log_cold_unlocked(session, assistant_message)
+        record_session_event!(session, :operation_finished, (id = request_id, success = true))
         _save_hot_unlocked(session)
         finalize && _maybe_compress_unlocked!(session)
         return response
@@ -1539,11 +1576,31 @@ end
 # Persistence
 # -----------------------------------------------------------------------------
 
+function _response_storage(response::ModelResponse)
+    return (message = _message_storage(ChatMessage(ROLE_ASSISTANT, response.text; reasoning = response.reasoning,
+                        artifacts = response.artifacts, tool_calls = response.tool_calls)), done = response.done,
+            done_reason = response.done_reason,
+            metrics = NamedTuple{fieldnames(ResponseMetrics)}(Tuple(getfield(response.metrics, name) for name in fieldnames(ResponseMetrics))),
+            executions = [(call_id = value.call_id, name = value.name, success = value.success, output = value.output,
+                           exit_code = value.exit_code, artifacts = _artifact_dict.(value.artifacts)) for value in response.tool_executions])
+end
+
+function _response_from_storage(value)::ModelResponse
+    message = _message_from_storage(value.message)
+    metrics = ResponseMetrics(; (Symbol(name) => (number === nothing ? nothing : Int(number)) for (name, number) in pairs(value.metrics))...)
+    executions = ToolExecution[ToolExecution(String(item.call_id), String(item.name), Bool(item.success), String(item.output);
+                                exit_code = item.exit_code, artifacts = ArtifactRef[_artifact_from_json(ref) for ref in item.artifacts])
+                               for item in value.executions]
+    return ModelResponse(message.content; reasoning = message.reasoning, artifacts = message.artifacts, tool_calls = message.tool_calls,
+                         tool_executions = executions, done = Bool(value.done), done_reason = value.done_reason, metrics)
+end
+
 function _cold_entry(message::ChatMessage; include_reasoning::Bool = true)::Dict{String,Any}
     return Dict{String,Any}("timestamp" => string(now(UTC)), "message" => _message_storage(message; include_reasoning))
 end
 
 function _log_cold_unlocked(session::ChatSession, message::ChatMessage)::Nothing
+    SessionJournals.append_event!(session.journal, :message, _message_storage(message; include_reasoning = true))
     isnothing(session._cold_io) && return nothing
     entry = _cold_entry(message; include_reasoning = session.persist_reasoning)
     println(session._cold_io, JSON3.write(entry))
@@ -1584,13 +1641,93 @@ function _atomic_write_json(path::String, value)::Nothing
     return nothing
 end
 
-function _save_hot_unlocked(session::ChatSession)::Nothing
-    isnothing(session.session_dir) && return nothing
-    hot = Dict{String,Any}("schema_version" => _HOT_SCHEMA_VERSION, "session_type" => session.session_type, "model_name" => session.model.name, 
-                           "prompt" => session.prompt, "summary" => session.summary, "protected_facts" => copy(session.protected_facts), 
+function _ordered_json(value)
+    if value isa AbstractDict || value isa JSON3.Object
+        names = sort!(String.(collect(keys(value))))
+        return NamedTuple{Tuple(Symbol.(names))}(Tuple(_ordered_json(value[name]) for name in names))
+    elseif value isa AbstractVector
+        return _ordered_json.(value)
+    end
+    return value
+end
+
+function record_session_event!(session::ChatSession, kind::Symbol, payload)
+    return lock(session.lock) do
+        _require_open_unlocked(session)
+        SessionJournals.append_event!(session.journal, kind, payload)
+    end
+end
+
+session_journal(session::ChatSession) = session.journal
+
+"""Return unfinished invocations as uncertain operations. Resumption never executes them."""
+function pending_operations(session::ChatSession)
+    pending = Dict{String,Any}()
+    SessionJournals.foreach_event(session.journal) do event
+        event.kind in ("operation_started", "operation_finished") || return
+        payload = JSON3.read(event.payload_json)
+        if event.kind == "operation_started"
+            pending[String(payload.id)] = (event_id = event.id, payload = payload, status = :uncertain)
+        elseif event.kind == "operation_finished"
+            delete!(pending, String(payload.id))
+        end
+    end
+    return sort!(collect(values(pending)); by = item -> string(item.event_id))
+end
+
+function _tool_seen(session::ChatSession, id::String)::Bool
+    seen = false
+    SessionJournals.foreach_event(session.journal) do event
+        event.kind == "operation_started" || return
+        payload = JSON3.read(event.payload_json)
+        get(payload, :operation, "") == "tool" && String(payload.id) == id && (seen = true)
+    end
+    return seen
+end
+
+"""Verify journal integrity and report missing or changed artifact bytes without altering history."""
+function verify_session(session::ChatSession; checkpoint::Union{SessionJournals.JournalHead,Nothing} = nothing)
+    issues = NamedTuple[]
+    head = SessionJournals.foreach_event(session.journal; checkpoint) do event
+        event.kind == "message" || return
+        payload = JSON3.read(event.payload_json)
+        for value in get(payload, :artifacts, [])
+            artifact = _artifact_from_json(value)
+            status = try
+                path = ArtifactStore.resolve_artifact(session.artifact_store, artifact)
+                !isfile(path) ? :missing : (filesize(path) == artifact.size_bytes && bytes2hex(open(sha256, path)) == artifact.sha256 ? :ok : :changed)
+            catch
+                :inaccessible
+            end
+            status == :ok || push!(issues, (event_id = event.id, artifact_path = artifact.path, status))
+        end
+    end
+    return (head, artifact_issues = issues, pending = pending_operations(session))
+end
+
+function _state_payload(session::ChatSession)
+    return Dict{String,Any}("schema_version" => _HOT_SCHEMA_VERSION, "session_type" => session.session_type,
+                           "model_name" => session.model.name, "base_url" => session.model.base_url,
+                           "prompt" => session.prompt, "summary" => session.summary, "protected_facts" => copy(session.protected_facts),
                            "messages" => [_message_storage(message; include_reasoning = session.persist_reasoning) for message in session.messages],
                            "cfg" => _budget_dict(session.cfg), "persist_reasoning" => session.persist_reasoning)
-    _atomic_write_json(joinpath(session.session_dir, "hot.json"), hot)
+end
+
+function _save_hot_unlocked(session::ChatSession)::Nothing
+    hot = _state_payload(session)
+    encoded = JSON3.write(_ordered_json(hot))
+    digest = bytes2hex(sha256(encoded))
+    if digest != session.journal_state_sha256
+        SessionJournals.append_event!(session.journal, :context_state; payload_json = encoded)
+        session.journal_state_sha256 = digest
+    end
+    if session.session_dir !== nothing
+        try
+            _atomic_write_json(joinpath(session.session_dir, "hot.json"), hot)
+        catch error
+            @warn "Journal committed; hot-view cache refresh failed" exception = (error, catch_backtrace())
+        end
+    end
     return nothing
 end
 
@@ -1617,34 +1754,147 @@ function _migrate_legacy_messages(values)::Vector{ChatMessage}
     return ChatMessage[ChatMessage(ProtocolTypes.parse_role(String(get(value, "role", "user"))), String(get(value, "content", ""))) for value in values]
 end
 
-function load_session(model::OllamaModel, session_dir::AbstractString; artifact_store::Union{ArtifactStore.Store,Nothing} = nothing)::ChatSession
+function load_session(model::OllamaModel, session_dir::AbstractString; artifact_store::Union{ArtifactStore.Store,Nothing} = nothing,
+                      recover::Bool = false, checkpoint::Union{SessionJournals.JournalHead,Nothing} = nothing)::ChatSession
     directory = String(session_dir)
-    path = joinpath(directory, "hot.json")
-    isfile(path) || error("No hot store found at $path")
-    data = JSON3.read(read(path, String))
-    schema_version = Int(get(data, "schema_version", 0))
-    schema_version <= _HOT_SCHEMA_VERSION || error("Unsupported hot-store schema version $schema_version")
-    cfg = _config_from_json(data["cfg"])
-    messages = schema_version <= 1 ? _migrate_legacy_messages(data["messages"]) : ChatMessage[_message_from_storage(value) for value in data["messages"]]
-    summary_value = get(data, "summary", nothing)
-    summary = isnothing(summary_value) ? nothing : String(summary_value)
-    kind = String(get(data, "session_type", "generic"))
-    cold_io = open(joinpath(directory, "cold.jsonl"), "a")
-    store = isnothing(artifact_store) ? _default_artifact_store(directory) : artifact_store
-    protected_facts = String[String(value) for value in get(data, "protected_facts", String[])]
-    return ChatSession(model, String(data["prompt"]), summary, protected_facts, messages, cfg, nothing, directory, cold_io, kind, store, Bool(get(data, "persist_reasoning", false)), ReentrantLock(), UInt64(0), nothing, false)
+    path = joinpath(directory, "journal.jsonl")
+    journal = SessionJournals.open_journal(path; recover, checkpoint)
+    cold_io = nothing
+    try
+        data = nothing
+        state_digest = ""
+        extra_messages = ChatMessage[]
+        settings = Dict{String,Any}()
+        legacy_import = nothing
+        legacy_count = 0
+        restored_response = nothing
+        SessionJournals.foreach_event(journal) do event
+            event.kind in ("context_state", "message", "response_received", "interaction_finished", "legacy_import", "legacy_record", "runtime_settings") || return
+            payload = JSON3.read(event.payload_json)
+            if event.kind == "context_state"
+                data = payload
+                state_digest = bytes2hex(sha256(event.payload_json))
+                empty!(extra_messages)
+            elseif event.kind == "message"
+                push!(extra_messages, _message_from_storage(payload))
+            elseif event.kind in ("response_received", "interaction_finished")
+                restored_response = _response_from_storage(payload)
+            elseif event.kind == "legacy_import"
+                legacy_import = payload
+            elseif event.kind == "legacy_record"
+                legacy_count += 1
+            elseif event.kind == "runtime_settings"
+                settings = Dict{String,Any}(String(key) => value for (key, value) in pairs(payload))
+            end
+        end
+        if data === nothing
+            # Legacy bytes are left untouched. Cold records are imported once; unavailable originals cannot be reconstructed.
+            hot_path = joinpath(directory, "hot.json")
+            isfile(hot_path) || throw(ArgumentError("session has no committed state or legacy hot store"))
+            filesize(hot_path) <= journal.max_record_bytes || throw(ArgumentError("legacy hot store exceeds the journal record limit"))
+            data = JSON3.read(read(hot_path, String))
+            version = Int(get(data, "schema_version", 0))
+            0 <= version <= _HOT_SCHEMA_VERSION || throw(ArgumentError("unsupported legacy hot-store schema"))
+            cold_path = joinpath(directory, "cold.jsonl")
+            hot_digest = bytes2hex(open(sha256, hot_path))
+            cold_digest = isfile(cold_path) ? bytes2hex(open(sha256, cold_path)) : nothing
+            if legacy_import === nothing
+                # Backups preserve every legacy byte before the new cache is refreshed.
+                backup = joinpath(directory, "legacy-originals")
+                SessionJournals._durable_mkpath(abspath(backup))
+                for source in (hot_path, cold_path)
+                    isfile(source) || continue
+                    target = joinpath(backup, basename(source))
+                    if isfile(target)
+                        bytes2hex(open(sha256, target)) == bytes2hex(open(sha256, source)) ||
+                            throw(ArgumentError("legacy backup differs from the source"))
+                    else
+                        temporary = tempname(backup)
+                        try
+                            cp(source, temporary)
+                            open(temporary, "a") do io
+                                SessionJournals._sync(io)
+                            end
+                            mv(temporary, target)
+                        finally
+                            isfile(temporary) && rm(temporary)
+                        end
+                    end
+                end
+                bytes2hex(open(sha256, hot_path)) == hot_digest || throw(ArgumentError("legacy hot source changed during migration"))
+                (!isfile(cold_path) ? nothing : bytes2hex(open(sha256, cold_path))) == cold_digest ||
+                    throw(ArgumentError("legacy cold source changed during migration"))
+                SessionJournals._sync_directory(backup)
+                SessionJournals._sync_directory(directory)
+                SessionJournals.append_event!(journal, :legacy_import, (hot_sha256 = hot_digest, cold_sha256 = cold_digest,
+                    limitation = "Only surviving legacy records can be recovered; backups retain original bytes."))
+            else
+                legacy_import.hot_sha256 == hot_digest && legacy_import.cold_sha256 == cold_digest ||
+                    throw(ArgumentError("legacy source changed during interrupted migration"))
+            end
+            if isfile(cold_path)
+                open(cold_path, "r") do io
+                    line_number = 0
+                    while !eof(io)
+                        bytes, complete = SessionJournals._record(io, journal.max_record_bytes)
+                        complete || throw(ArgumentError("legacy cold log has an incomplete final record"))
+                        line = String(bytes)
+                        JSON3.read(line)
+                        line_number += 1
+                        line_number <= legacy_count && continue
+                        SessionJournals.append_event!(journal, :legacy_record, (source_line = line_number, raw_json = line))
+                    end
+                end
+            end
+            legacy_messages = version <= 1 ? _migrate_legacy_messages(data.messages) : ChatMessage[_message_from_storage(value) for value in data.messages]
+            data = Dict{String,Any}("schema_version" => _HOT_SCHEMA_VERSION, "session_type" => String(get(data, "session_type", "generic")),
+                                   "model_name" => String(data.model_name), "base_url" => String(get(data, "base_url", model.base_url)),
+                                   "prompt" => String(data.prompt), "summary" => get(data, "summary", nothing),
+                                   "protected_facts" => String[String(x) for x in get(data, "protected_facts", [])],
+                                   "messages" => [_message_storage(message; include_reasoning = Bool(get(data, "persist_reasoning", false))) for message in legacy_messages],
+                                   "cfg" => _budget_dict(_config_from_json(data.cfg)), "persist_reasoning" => Bool(get(data, "persist_reasoning", false)))
+            # Canonical state bytes ensure subsequent save/resume does not duplicate this event.
+            canonical = JSON3.write(_ordered_json(data))
+            SessionJournals.append_event!(journal, :context_state; payload_json = canonical)
+            state_digest = bytes2hex(sha256(canonical))
+            data = JSON3.read(canonical)
+            empty!(extra_messages)
+        end
+        schema_version = Int(get(data, "schema_version", 0))
+        0 <= schema_version <= _HOT_SCHEMA_VERSION || throw(ArgumentError("unsupported session state schema"))
+        messages = schema_version <= 1 ? _migrate_legacy_messages(data.messages) : ChatMessage[_message_from_storage(value) for value in data.messages]
+        append!(messages, extra_messages)
+        summary = data.summary === nothing ? nothing : String(data.summary)
+        store = isnothing(artifact_store) ? _default_artifact_store(directory) : artifact_store
+        cold_io = open(joinpath(directory, "cold.jsonl"), "a")
+        session = ChatSession(model, String(data.prompt), summary, String[String(x) for x in get(data, "protected_facts", String[])],
+                              messages, _config_from_json(data.cfg), nothing, directory, cold_io, String(get(data, "session_type", "generic")),
+                              store, Bool(get(data, "persist_reasoning", false)), ReentrantLock(), UInt64(0), nothing, false,
+                              journal, state_digest, settings)
+        session.last_response = restored_response
+        if String(data.model_name) != model.name || String(get(data, "base_url", model.base_url)) != model.base_url
+            SessionJournals.append_event!(journal, :model_changed, (previous = String(data.model_name), model = model.name, base_url = model.base_url))
+        end
+        return session
+    catch
+        cold_io === nothing || close(cold_io)
+        close(journal)
+        rethrow()
+    end
 end
 
 function close_session(session::ChatSession)::Nothing
     _lock_when_idle!(session)
     try
         session.closed && return nothing
-        _save_hot_unlocked(session)
-        if !isnothing(session._cold_io)
-            close(session._cold_io)
+        try
+            _save_hot_unlocked(session)
+        finally
+            session._cold_io === nothing || close(session._cold_io)
             session._cold_io = nothing
+            close(session.journal)
+            session.closed = true
         end
-        session.closed = true
     finally
         unlock(session.lock)
     end

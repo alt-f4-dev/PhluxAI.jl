@@ -50,7 +50,8 @@ makedocs(
         "Reference" => "reference/api.md",
         "Development" => ["Documentation" => "development/documentation.md",
                           "Research contracts" => "development/research-contracts.md",
-                          "Source analysis" => "development/source-analysis.md"],
+                          "Source analysis" => "development/source-analysis.md",
+                          "Durable session history" => "development/session-history.md"],
     ],
     remote_options...,
 )

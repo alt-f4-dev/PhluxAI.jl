@@ -605,18 +605,27 @@ end
 
 """Validate, authorize, and execute one model-requested tool call."""
 function execute_tool_call(context::ToolContext, call::ToolCall; mode::ToolMode = TOOLS_ASK,
-                           approval_callback::Union{Nothing,Function} = nothing)::ToolExecution
+                           approval_callback::Union{Nothing,Function} = nothing, event_callback::Union{Nothing,Function} = nothing)::ToolExecution
     tool = get(context.registry.tools, call.name, nothing)
-    (isnothing(tool) || _spec(tool).name != call.name || context.registry.policy_only != (tool isa PolicyTool)) &&
+    if isnothing(tool) || _spec(tool).name != call.name || context.registry.policy_only != (tool isa PolicyTool)
+        event_callback === nothing || event_callback(:tool_rejected, (call_id = call.id, reason = "not_registered"))
         return ToolExecution(call.id, call.name, false, "tool is not registered")
-    mode == TOOLS_OFF && return ToolExecution(call.id, call.name, false, "tool execution was not approved")
+    end
+    if mode == TOOLS_OFF
+        event_callback === nothing || event_callback(:approval_decision, (call_id = call.id, name = call.name,
+                                                                         mode = string(mode), risk = string(_risk(tool)), approved = false))
+        return ToolExecution(call.id, call.name, false, "tool execution was not approved")
+    end
     try
         arguments = _parse_arguments(call)
-        _approved(mode, tool, call, approval_callback) ||
-            return ToolExecution(call.id, call.name, false, "tool execution was not approved")
+        approved = _approved(mode, tool, call, approval_callback)
+        event_callback === nothing || event_callback(:approval_decision, (call_id = call.id, name = call.name,
+                                                                         mode = string(mode), risk = string(_risk(tool)), approved))
+        approved || return ToolExecution(call.id, call.name, false, "tool execution was not approved")
         return _dispatch(context, tool, call, arguments)
     catch error
         error isa InterruptException && rethrow()
+        event_callback === nothing || event_callback(:tool_rejected, (call_id = call.id, reason = sprint(showerror, error)))
         return ToolExecution(call.id, call.name, false, sprint(showerror, error))
     end
 end

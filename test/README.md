@@ -12,7 +12,7 @@ Set `PHLUXAI_TEST_PROFILE` to select another tier:
 
 | Profile | Scope | Prerequisites |
 |---|---|---|
-| cpu | Unit, structural, and mock-HTTP tests | Julia and project dependencies |
+| cpu | Unit, journal/crash/replay, structural, and mock-HTTP tests | Julia and project dependencies |
 | sandbox | Actual Bubblewrap confinement and PDF/HDF5 dispatch tests | Linux, bwrap, user namespaces, delegated cgroup v2, parser dependencies |
 | analysis | Native parser worker, result, and provenance tests | Python with h5py, pdfplumber, reportlab, Pillow, Poppler, Tesseract, DejaVu Sans |
 | live | Functional inference and image generation tests | Running Ollama/ComfyUI and the expected models |
@@ -24,3 +24,5 @@ For example, use `PHLUXAI_TEST_PROFILE=sandbox julia --project=. --startup-file=
 GitHub Actions runs the CPU profile on Julia 1.12 and 1.13, native analysis tests, and a separately provisioned sandbox job. The sandbox job must pass actual namespace and cgroup checks. Live and benchmark profiles require separately provisioned inference environments.
 
 When adding a `test_*.jl` file, add an entry in `suite_manifest.jl` and select the narrowest accurate tier. Never label a test CPU-only if it depends on a running model or a real GPU. Tests execute as independent Julia processes to avoid shared mutable state and module redefinition.
+
+Journal storage, corruption, and append-scaling checks run in `test_journal_storage.jl`; subprocess durability boundaries run in `test_journal_crash.jl`; session, legacy, HTTP, and approval integration run in `test_session_history.jl`. These tests require a POSIX local filesystem with `flock` and `fsync`.

@@ -6,6 +6,7 @@ using JSON3
 include("core/ProtocolTypes.jl")
 include("core/ResearchContracts.jl")
 include("core/Artifacts.jl")
+include("core/SessionJournal.jl")
 include("core/ModelCapabilities.jl")
 include("core/ImageInterface.jl")
 include("tools/Sandbox.jl")
@@ -20,6 +21,11 @@ include("core/ComfyWorkflow.jl")
 include("core/ComfyLifecycle.jl")
 include("core/ModelSession.jl")
 include("agents/PhysicalAssistant.jl")
+
+using .SessionJournals: SessionJournal, JournalEvent, JournalHead, JournalError, open_journal, append_event!,
+                        foreach_event, verify_journal, journal_head, checkpoint_json, parse_checkpoint
+
+export SessionJournal, JournalEvent, JournalHead, JournalError, open_journal, append_event!, foreach_event, verify_journal, journal_head, checkpoint_json, parse_checkpoint
 
 import .ArtifactStore
 import .CapabilityDiscovery
@@ -68,6 +74,9 @@ using .OllamaClient: BudgetConfig,
                      effective_response_budget,
                      history_budget,
                      compression_trigger
+
+using .OllamaClient: session_journal, pending_operations, verify_session
+export session_journal, pending_operations, verify_session
 
 using .ModelSessions: ModelSession
 using .ImageInterface: AbstractImageBackend,

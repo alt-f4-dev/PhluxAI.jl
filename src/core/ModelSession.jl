@@ -1,5 +1,7 @@
 module ModelSessions
 
+using JSON3
+
 import ..ArtifactStore
 import ..CapabilityDiscovery
 import ..ImageInterface
@@ -154,7 +156,9 @@ function ModelSession(
     capabilities::Union{CapabilityDiscovery.ModelCapabilities, Nothing} = nothing,
     image_backend::Union{ImageInterface.AbstractImageBackend, Nothing} = nothing,
     stop_model_on_close::Bool = false,
-    ollama_unloaded_for_image::Bool = false
+    ollama_unloaded_for_image::Bool = false,
+    attachments::AbstractVector{ArtifactRef} = ArtifactRef[],
+    defer_tool_context::Bool = false
 )::ModelSession
     selected_image_backend = isnothing(image_backend) ? OllamaClient.OllamaImageBackend(session.model) : image_backend
     model_session = ModelSession(
@@ -170,13 +174,14 @@ function ModelSession(
         nothing,
         capabilities,
         selected_image_backend,
-        ArtifactRef[],
+        collect(attachments),
         stop_model_on_close,
         ollama_unloaded_for_image,
         ReentrantLock(),
         false,
     )
-    tool_mode == JupyTools.TOOLS_OFF || _ensure_tool_context!(model_session)
+    (defer_tool_context || tool_mode == JupyTools.TOOLS_OFF) || _ensure_tool_context!(model_session)
+    _record_settings!(model_session)
     return model_session
 end
 
@@ -268,13 +273,13 @@ function load_model_session(
     cfg::Union{OllamaClient.BudgetConfig,Nothing} = nothing,
     base_url::AbstractString = OllamaClient.OLLAMA_BASE,
     artifact_dir::Union{AbstractString,Nothing} = nothing,
-    temperature::Real = DEFAULT_TEMPERATURE,
-    thinking = nothing,
-    show_reasoning::Bool = false,
-    keep_alive = nothing,
-    request_timeout::Real = 0.0,
-    read_idle_timeout::Real = 0.0,
-    tool_mode::JupyTools.ToolMode = JupyTools.TOOLS_OFF,
+    temperature::Union{Real,Nothing} = nothing,
+    thinking = missing,
+    show_reasoning::Union{Bool,Nothing} = nothing,
+    keep_alive = missing,
+    request_timeout::Union{Real,Nothing} = nothing,
+    read_idle_timeout::Union{Real,Nothing} = nothing,
+    tool_mode::Union{JupyTools.ToolMode,Nothing} = nothing,
     sandbox_dir::Union{AbstractString,Nothing} = nothing,
     sandbox_backend::Sandboxing.SandboxBackend = Sandboxing.SANDBOX_AUTO,
     sandbox_network::Bool = false,
@@ -288,6 +293,8 @@ function load_model_session(
     poll_interval::Real = DEFAULT_POLL_INTERVAL,
     start_model::Bool = true,
     stop_model_on_close::Union{Bool,Nothing} = nothing,
+    recover::Bool = false,
+    checkpoint::Union{OllamaClient.SessionJournals.JournalHead,Nothing} = nothing,
 )::ModelSession
     directory = _session_dir(session_dir)::String
     model = OllamaClient.OllamaModel(model_name, base_url)
@@ -296,16 +303,29 @@ function load_model_session(
                               timeout_seconds = sandbox_timeout, allow_unsafe_local, readonly_paths = sandbox_readonly_paths, environment = sandbox_environment)
     stop_on_close = _stop_policy(stop_model_on_close, start_model)
     started = false
+    session = nothing
     try
         if start_model
             OllamaClient.start_model!(model.name, model.base_url; timeout = _positive_int(timeout, "timeout"), poll_interval = _positive_float(poll_interval,"poll_interval"))
             started = true
         end
-        session = OllamaClient.load_session(model, directory; artifact_store = store)
+        session = OllamaClient.load_session(model, directory; artifact_store = store, recover, checkpoint)
+        saved = session.runtime_settings
+        temperature = something(temperature, get(saved, "temperature", DEFAULT_TEMPERATURE))
+        show_reasoning = something(show_reasoning, get(saved, "show_reasoning", false))
+        request_timeout = something(request_timeout, get(saved, "request_timeout", 0.0))
+        read_idle_timeout = something(read_idle_timeout, get(saved, "read_idle_timeout", 0.0))
+        tool_mode = something(tool_mode, _tool_mode(replace(lowercase(String(get(saved, "tool_mode", "off"))), "tools_" => "")))
+        if thinking === missing
+            stored_thinking = get(saved, "thinking", nothing)
+            thinking = stored_thinking === nothing ? nothing : replace(lowercase(String(stored_thinking)), "think_" => "")
+        end
+        keep_alive = keep_alive === missing ? get(saved, "keep_alive", nothing) : keep_alive
         isnothing(cfg) || (session.cfg = cfg)
         capabilities = _discover_capabilities(model, discover_capabilities)
-        return ModelSession(
-            session;
+        restored_attachments = ArtifactRef[OllamaClient._artifact_from_json(item) for item in get(saved, "attachments", [])]
+        result = ModelSession(
+            session; attachments = restored_attachments, defer_tool_context = true,
             temperature,
             thinking,
             show_reasoning,
@@ -318,7 +338,15 @@ function load_model_session(
             image_backend,
             stop_model_on_close = stop_on_close,
         )
+        return result
     catch
+        if session !== nothing
+            try
+                OllamaClient.close_session(session)
+            catch cleanup_error
+                @warn "Loaded-session cleanup failed" exception = cleanup_error
+            end
+        end
         if started && stop_on_close
             try
                 OllamaClient.stop_model!(model)
@@ -349,6 +377,37 @@ function _approval_callback(call::ProtocolTypes.ToolCall, risk::JupyTools.ToolRi
         ""
     end
     return answer in ("y", "yes")
+end
+
+OllamaClient.session_journal(ms::ModelSession) = OllamaClient.session_journal(ms.session)
+OllamaClient.pending_operations(ms::ModelSession) = OllamaClient.pending_operations(ms.session)
+OllamaClient.verify_session(ms::ModelSession; kwargs...) = OllamaClient.verify_session(ms.session; kwargs...)
+
+function _record_settings!(ms::ModelSession)::Nothing
+    settings = Dict{String,Any}("temperature" => ms.temperature, "thinking" => ms.thinking === nothing ? nothing : string(ms.thinking),
+                                "show_reasoning" => ms.show_reasoning, "keep_alive" => ms.keep_alive,
+                                "request_timeout" => ms.request_timeout, "read_idle_timeout" => ms.read_idle_timeout,
+                                "tool_mode" => string(ms.tool_mode), "image_backend" => ImageInterface.backend_name(ms.image_backend),
+                                "attachments" => OllamaClient._artifact_dict.(ms.attachments))
+    if settings != ms.session.runtime_settings
+        OllamaClient.record_session_event!(ms.session, :runtime_settings, settings)
+        ms.session.runtime_settings = settings
+    end
+    return nothing
+end
+
+function _execute_journaled_tool!(ms::ModelSession, context::JupyTools.ToolContext, call::ProtocolTypes.ToolCall,
+                                   mode::JupyTools.ToolMode, approval_callback::Union{Nothing,Function})::ToolExecution
+    OllamaClient._tool_seen(ms.session, call.id) && throw(ArgumentError("tool call ID was already invoked; inspect its journal status before a new invocation"))
+    OllamaClient.record_session_event!(ms.session, :operation_started, (id = call.id, operation = "tool", name = call.name,
+                                                                     arguments_json = call.arguments_json, mode = string(mode)))
+    audit(kind, payload) = OllamaClient.record_session_event!(ms.session, kind, payload)
+    execution = JupyTools.execute_tool_call(context, call; mode, approval_callback, event_callback = audit)
+    # Persist the result message before marking execution complete. A crash in between remains explicitly uncertain.
+    OllamaClient.append_tool_execution!(ms.session, execution)
+    OllamaClient.record_session_event!(ms.session, :operation_finished,
+                                      (id = call.id, success = execution.success, exit_code = execution.exit_code))
+    return execution
 end
 
 function respond!(
@@ -400,9 +459,8 @@ function respond!(
             end
             context === nothing && break
             for call in response.tool_calls
-                execution = JupyTools.execute_tool_call(context, call; mode = tool_mode, approval_callback)
+                execution = _execute_journaled_tool!(ms, context, call, tool_mode, approval_callback)
                 push!(executions, execution)
-                OllamaClient.append_tool_execution!(ms.session, execution)
             end
             response = OllamaClient.continue_response!(ms.session; temperature = selected_temperature, max_tokens = selected_tokens,
                                                        keep_alive = selected_keep_alive, thinking = selected_thinking, tools = registry_specs,
@@ -411,6 +469,7 @@ function respond!(
         end
         OllamaClient.finalize_interaction!(ms.session)
         combined = with_tool_executions(response, executions)
+        OllamaClient.record_session_event!(ms.session, :interaction_finished, OllamaClient._response_storage(combined))
         lock(ms.session.lock) do
             ms.session.last_response = combined
         end
@@ -548,6 +607,7 @@ function set_image_backend!(ms::ModelSession, backend::ImageInterface.AbstractIm
     lock(ms.lock) do
         _require_open(ms)
         ms.image_backend = backend
+        _record_settings!(ms)
     end
     return ms
 end
@@ -558,6 +618,7 @@ function set_temperature!(ms::ModelSession, temperature::Real)::ModelSession
     lock(ms.lock) do
         _require_open(ms)
         ms.temperature = value
+        _record_settings!(ms)
     end
     return ms
 end
@@ -567,6 +628,7 @@ function set_thinking!(ms::ModelSession, value)::ModelSession
     lock(ms.lock) do
         _require_open(ms)
         ms.thinking = normalized
+        _record_settings!(ms)
     end
     return ms
 end
@@ -575,6 +637,7 @@ function set_reasoning_visible!(ms::ModelSession, visible::Bool)::ModelSession
     lock(ms.lock) do
         _require_open(ms)
         ms.show_reasoning = visible
+        _record_settings!(ms)
     end
     return ms
 end
@@ -584,6 +647,7 @@ function set_keep_alive!(ms::ModelSession, value)::ModelSession
     lock(ms.lock) do
         _require_open(ms)
         ms.keep_alive = normalized
+        _record_settings!(ms)
     end
     return ms
 end
@@ -597,6 +661,7 @@ function set_timeouts!(ms::ModelSession; request_timeout::Union{Real,Nothing} = 
         if !isnothing(read_idle_timeout)
             ms.read_idle_timeout = _nonnegative_timeout(read_idle_timeout, "read_idle_timeout")
         end
+        _record_settings!(ms)
     end
     return ms
 end
@@ -606,6 +671,7 @@ function set_tool_mode!(ms::ModelSession, mode::JupyTools.ToolMode)::ModelSessio
         _require_open(ms)
         mode == JupyTools.TOOLS_OFF || _ensure_tool_context!(ms)
         ms.tool_mode = mode
+        _record_settings!(ms)
     end
     return ms
 end
@@ -618,6 +684,7 @@ function set_tool_context!(ms::ModelSession, context::JupyTools.ToolContext)::Mo
         context.artifacts.root == ms.session.artifact_store.root || throw(ArgumentError("tool context must use the session artifact store"))
         ms.sandbox = context.sandbox
         ms.tool_context = context
+        _record_settings!(ms)
     end
     return ms
 end
@@ -627,6 +694,7 @@ function attach!(ms::ModelSession, path::AbstractString)::ArtifactRef
         _require_open(ms)
         imported = ArtifactStore.import_artifact(ms.session.artifact_store, path)
         push!(ms.attachments, imported)
+        _record_settings!(ms)
         return imported
     end
     return artifact
@@ -636,6 +704,7 @@ function clear_attachments!(ms::ModelSession)::Nothing
     lock(ms.lock) do
         _require_open(ms)
         empty!(ms.attachments)
+        _record_settings!(ms)
     end
     return nothing
 end
@@ -650,6 +719,7 @@ end
 function save(ms::ModelSession)::Nothing
     lock(ms.lock) do
         _require_open(ms)
+        _record_settings!(ms)
         OllamaClient.save_session(ms.session)
     end
     return nothing

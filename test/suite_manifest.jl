@@ -7,6 +7,9 @@
 
 const SUITE_TIERS = (:cpu, :sandbox, :analysis, :live, :benchmark)
 const SUITE_MANIFEST = (
+    (file = "test_journal_storage.jl", tier = :cpu),
+    (file = "test_journal_crash.jl", tier = :cpu),
+    (file = "test_session_history.jl", tier = :cpu),
     (file = "test_comfy_http.jl", tier = :cpu),
     (file = "test_comfy_interactive_api.jl", tier = :cpu),
     (file = "test_comfy_latency.jl", tier = :benchmark),

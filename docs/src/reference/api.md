@@ -24,6 +24,7 @@ Modules = [
     PhluxAI.Sandboxing,
     PhluxAI.SourceStores,
     PhluxAI.AnalysisTools,
+    PhluxAI.SessionJournals,
 ]
 Order = [:macro, :type, :function, :constant]
 ```
@@ -45,6 +46,7 @@ Modules = [
     PhluxAI.Sandboxing,
     PhluxAI.SourceStores,
     PhluxAI.AnalysisTools,
+    PhluxAI.SessionJournals,
 ]
 Private = false
 Order = [:macro, :type, :function, :constant]
