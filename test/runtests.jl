@@ -4,7 +4,7 @@ const ROOT = normpath(joinpath(@__DIR__, ".."))
 include(joinpath(@__DIR__, "suite_manifest.jl"))
 
 const TEST_PROFILE = lowercase(strip(get(ENV, "PHLUXAI_TEST_PROFILE", "cpu")))
-const TEST_PROFILES = ("cpu", "sandbox", "live", "benchmark", "all")
+const TEST_PROFILES = ("cpu", "sandbox", "analysis", "live", "benchmark", "all")
 TEST_PROFILE in TEST_PROFILES || throw(ArgumentError(
     "PHLUXAI_TEST_PROFILE must be one of $(join(TEST_PROFILES, ", ")); got '$(TEST_PROFILE)'",
 ))

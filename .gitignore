@@ -11,3 +11,6 @@ deps/build.log
 
 #generated files
 requirements.txt
+
+# Python parser bytecode
+__pycache__/

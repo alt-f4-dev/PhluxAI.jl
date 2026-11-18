@@ -11,7 +11,9 @@ include("core/ImageInterface.jl")
 include("tools/Sandbox.jl")
 include("tools/ToolContracts.jl")
 include("tools/PolicyWorkers.jl")
+include("core/Sources.jl")
 include("tools/JupyTools.jl")
+include("analysis/AnalysisTools.jl")
 include("core/OllamaClient.jl")
 include("core/ComfyClient.jl")
 include("core/ComfyWorkflow.jl")
@@ -99,6 +101,7 @@ using .JupyTools: ToolContext,
                   register!
 using .ToolContracts: ExecutionPolicy, ToolHandlerDeclaration, AbstractToolHandler, tool_declaration, tool_command
 using .PolicyWorkers: SourceGrant
+using .SourceStores: SourceStore, import_source, source_grant, verify_source
 using .Sandboxing: ProcessResult,
                    SandboxBackend,
                    SandboxConfig,
@@ -680,6 +683,9 @@ export PHLUXAI_VERSION, welcome
 
 export SourceRef, EvidenceRef, OperationRecord, ModelRef, ModelCapabilitySet, ModelDescriptor, ResearchContracts
 export ExecutionPolicy, ToolHandlerDeclaration, AbstractToolHandler, tool_declaration, tool_command, SourceGrant, ToolContracts
+export SourceStore, import_source, source_grant, verify_source
+using .AnalysisTools: AnalysisLimits, AnalysisResult, analysis_registry, analysis_context, analyze_source
+export AnalysisLimits, AnalysisResult, analysis_registry, analysis_context, analyze_source
 export contract_json, parse_contract, supports_capability, require_model_capability, capability_set
 
 export ArtifactRef,

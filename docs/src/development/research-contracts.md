@@ -8,7 +8,7 @@ PhluxAI provides minimal, allocation-independent identity and provenance metadat
 
 `OperationRecord(id, action; inputs, outputs, parameters_json, status)` records an operation identifier, a tool/action name, source references, a JSON object of parameters, and an execution status. The constructor copies reference vectors to prevent later mutation through the original input vectors. The metadata record is not a durable journal or proof of execution. Its status and outputs must be recorded by a trusted controller, not by a language model's unsupported assertion.
 
-The current `ArtifactRef`, `ToolSpec`, `ToolExecution`, and `ModelCapabilities` remain unchanged. Higher-level source import, exact token counting, and model training require additional implementation.
+Source import and parser adapters are described in [Read-only PDF and HDF5 analysis](source-analysis.md). Exact token counting and model training require additional implementation.
 
 ## Tool contracts and execution policy
 

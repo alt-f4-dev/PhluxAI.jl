@@ -32,6 +32,33 @@ jobs:
       - name: Run isolated CPU and mock-HTTP regressions
         run: julia --project=. --startup-file=no test/runtests.jl
 
+  analysis-regressions:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      PHLUXAI_TEST_PROFILE: 'analysis'
+      PHLUXAI_BANNER: '0'
+      PHLUXAI_COMFY_AUTOSTART: '0'
+      PHLUXAI_SKIP_OLLAMA_INSTALL: '1'
+      PHLUXAI_SKIP_COMFY_INSTALL: '1'
+      RESEAU_PRECOMPILE_ONLY: 'eventloops,internal_poll,socket_ops,tcp,host_resolvers'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.13'
+      - uses: julia-actions/cache@v2
+      - name: Install parser and fixture dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y python3-h5py python3-pdfplumber python3-reportlab poppler-utils tesseract-ocr fonts-dejavu-core
+      - name: Validate parser operations and failure cases
+        run: /usr/bin/python3 -m unittest discover -s test/analysis -p test_worker.py -v
+      - name: Instantiate environment
+        run: julia --project=. --startup-file=no -e 'using Pkg; Pkg.instantiate()'
+      - name: Validate native worker protocol and provenance
+        run: julia --project=. --startup-file=no test/runtests.jl
+
   sandbox-integration:
     runs-on: ubuntu-24.04
     permissions:
@@ -56,7 +83,7 @@ jobs:
         shell: bash
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y bubblewrap
+          sudo apt-get install -y bubblewrap python3-h5py python3-pdfplumber python3-reportlab poppler-utils tesseract-ocr fonts-dejavu-core
           probe() {
               bwrap --unshare-user --disable-userns --unshare-net --unshare-pid --cap-drop ALL \
                   --ro-bind /usr /usr --ro-bind-try /lib64 /lib64 --ro-bind-try /lib /lib \

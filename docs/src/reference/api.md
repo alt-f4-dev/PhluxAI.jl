@@ -22,6 +22,8 @@ Modules = [
     PhluxAI.ArtifactStore,
     PhluxAI.JupyTools,
     PhluxAI.Sandboxing,
+    PhluxAI.SourceStores,
+    PhluxAI.AnalysisTools,
 ]
 Order = [:macro, :type, :function, :constant]
 ```
@@ -41,6 +43,8 @@ Modules = [
     PhluxAI.ArtifactStore,
     PhluxAI.JupyTools,
     PhluxAI.Sandboxing,
+    PhluxAI.SourceStores,
+    PhluxAI.AnalysisTools,
 ]
 Private = false
 Order = [:macro, :type, :function, :constant]

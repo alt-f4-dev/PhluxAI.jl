@@ -587,8 +587,16 @@ function _dispatch(context::ToolContext, tool::PolicyTool, call::ToolCall, argum
             grants[id] = grant
         end
     end
+    _validate_sources(tool.handler, arguments, grants)
     result, memory_exceeded, oom_killed = run_worker(tool.handler, arguments, grants, ids, tool.declaration.policy,
                                                      context.sandbox, context.worker_cgroup)
+    return _worker_result(tool.handler, call, result, memory_exceeded, oom_killed)
+end
+
+_validate_sources(handler::AbstractToolHandler, arguments, grants) = nothing
+
+function _worker_result(handler::AbstractToolHandler, call::ToolCall, result::Sandboxing.ProcessResult,
+                        memory_exceeded::Bool, oom_killed::Bool)::ToolExecution
     output = _format_process(result)
     memory_exceeded && (output = "memory_limit_exceeded: true\n" * output)
     oom_killed && (output = "worker_oom_killed: true\n" * output)

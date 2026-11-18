@@ -5,7 +5,7 @@
 # :live requires explicitly installed and running local model services and weights.
 # :benchmark runs device- and model-dependent performance experiments.
 
-const SUITE_TIERS = (:cpu, :sandbox, :live, :benchmark)
+const SUITE_TIERS = (:cpu, :sandbox, :analysis, :live, :benchmark)
 const SUITE_MANIFEST = (
     (file = "test_comfy_http.jl", tier = :cpu),
     (file = "test_comfy_interactive_api.jl", tier = :cpu),
@@ -39,5 +39,9 @@ const SUITE_MANIFEST = (
     (file = "test_sandbox_policy.jl", tier = :sandbox),
     (file = "test_syntax.jl", tier = :cpu),
     (file = "test_tool_contracts.jl", tier = :cpu),
+    (file = "test_source_store.jl", tier = :cpu),
+    (file = "test_analysis_api.jl", tier = :cpu),
+    (file = "test_analysis_native.jl", tier = :analysis),
+    (file = "test_analysis_sandbox.jl", tier = :sandbox),
     (file = "test_tool_dispatch.jl", tier = :cpu),
 )
